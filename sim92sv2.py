@@ -98,7 +98,7 @@ diffusion           =   6.0
 permeability        =  80.0
 permeability       *=   0.2
 synthesis_rate      =  50.0
-synthesis_threshold = 370.0
+synthesis_threshold = 10000.0 # SaporPuppis testuje gówno mocne, 370 domyślnie
 pool_range          =  20                  # pool numbers from -10 to +9 (pool_range-10)
 pool_center         =  10
 print("\n DIFF ", diffusion, " PERM ", permeability, " SYNTH_R ", synthesis_rate, " SYNTH_T ", synthesis_threshold)
@@ -511,7 +511,7 @@ print("LEFT AND RIGHT", datetime.now())
 
 
 synthesis_vector = np.zeros(points_number)
-synth_flag       = np.zeros(points_number, dtype=int)
+synth_flag       = np.zeros(points_number, dtype=np.int64) #SaporPuppis synth_flag       = np.zeros(points_number, dtype=int)
 
 
 previous_release = 0.0
@@ -519,7 +519,7 @@ previous_release = 0.0
 
 for i1 in range(i1_range):
     logfile = open(file_prefix + 'log90.txt', 'a')
-    logfile.write("{:8.0f} {:7.4f} {:20.8f}".format(i1, t, time.time()))
+    logfile.write("{:8.0f} {:7.5f} {:20.8f}".format(i1, t, time.time())) #SaporPuppis  logfile.write("{:8.0f} {:7.4f} {:20.8f}".format(i1, t, time.time()))
     logfile.close()
     time_diff = 0.0 - time.time()
     ii = i1 + 1 + i1_offset
@@ -537,11 +537,11 @@ for i1 in range(i1_range):
     vector_f_wo_p = sol_wo_p[0]
     for ind in range(points_number):
         synthesis_vector[ind] = 0.0
-        synth_flag[ind] = 0
+        synth_flag[ind] = 0 
     total_production_nodes = 0
     # print(" DETECT ROWS !! ")
     for row in nt_vol:
-        # print(row, end=" " )
+        #print(row, end=" " )
         if row[5] == -2:  # # # CORRECTED IN 90 VERSION, IS IT OK???
             if vector_f[row[0]] < synthesis_threshold and vector_f[row[1]] < synthesis_threshold and \
                             vector_f[row[2]] < synthesis_threshold and vector_f[row[3]] < synthesis_threshold:
@@ -552,6 +552,7 @@ for i1 in range(i1_range):
                 synthesis_vector[row[3]] += production_V(row[4], vector_f[row[3]], mean_f)
                 for i_row in range(4):
                     synth_flag[row[i_row]] += 1
+
 
     # print(" ")
     total_production_nodes = sum([1 for i_prod in range(points_number) if synth_flag[i_prod] > 0])
@@ -626,11 +627,11 @@ for i1 in range(i1_range):
                     ax.grid(True)   ###  >>>  added 11.XI.2024 to make similar to gr plots
                     ax = fig.add_subplot(111, projection='3d', alpha=1.0)
 
-                    ax.scatter(xxx, yyy, zzz, synthesis_vector, s=v_scatt, c=synthesis_vector,
-                               cmap=cmap_YoB, vmin=0.0, vmax=3E-3, lw=0)
+                    ax.scatter(xxx, yyy, zzz, 'z', s=v_scatt, c=synthesis_vector,
+                               cmap=cmap_YoB, vmin=0.0, vmax=3E-3, lw=0)  #SaporPuppis ax.scatter(xxx, yyy, zzz, synthesis_vector, s=v_scatt, c=synthesis_vector, cmap=cmap_YoB, vmin=0.0, vmax=3E-3, lw=0) 
                     plt.tight_layout()
                     ax.set_zlim(zfliml,zflimh)
-                    cb = fig.colorbar(colmap)
+                    cb = fig.colorbar(colmap,ax=ax)   #SaporPuppis cb = fig.colorbar(colmap)
                     plt.savefig(file_prefix + PLOTPATH+ 'gsss90nr' + str(ii) + '.png')
                     plt.close()
                     #  PLOT TWO-DIMENSIONAL
