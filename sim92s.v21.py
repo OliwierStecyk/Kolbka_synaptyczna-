@@ -24,7 +24,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 # Plot description and layout
 from matplotlib import rcParams
-PLOTPATH = 'plots/'   #SaporPuppis  -- tutaj trzeba zrobić sobie folder
+import os
+PLOTPATH = './plots/'   # SaporPuppis -- tutaj trzeba zrobić sobie folder
+if not os.path.exists(PLOTPATH):
+    os.makedirs(PLOTPATH)
 rcParams['font.family'] = 'sans-serif'
 rcParams['font.sans-serif'] = ['Arial']
 rcParams['font.size'] = 16
@@ -250,8 +253,8 @@ except:
     print("File ele90.1b.txt not found")
     exit(1)
 
-nt_vol = []
-work_xyz = []
+nt_vol = np.array([])  # SaporPuppis    nt_vol =[]
+work_xyz = np.array([]) # SaporPuppis    work_xyz =[]
 vol_pool_n = np.zeros(pool_range)   # Number of tets in flag value class
 vol_pool_v = np.zeros(pool_range)   # volumes (20 just for sure to grab all flags)
 total_volume = 0.0
@@ -261,36 +264,36 @@ for line in file:
     i += 1
     tab = line.split()
     #element_number = int(tab[0])  #SaporPuppis i tak nikt tego nie używa Rather not used later !! (??)  SaporPuppis
-    point_numbers = [int(tab[1]) - 1, int(tab[2]) - 1, int(tab[3]) - 1, int(tab[4]) - 1]
+    point_numbers = np.array([int(tab[1]) - 1, int(tab[2]) - 1, int(tab[3]) - 1, int(tab[4]) - 1])
     pn = point_numbers
-    pn.append(float(tab[17]) * vol_scale)
+    pn = np.append( pn, float(tab[17]) * vol_scale)
     #  In position 22 there is a code: -3 synthesis -2 inside -1 secretion
-    pn.append(int(tab[27]))
-    nt_vol.append(pn)
+    pn =  np.append(int(tab[27]))
+    nt_vol = np.append(nt_vol, pn)
 
     tpx = np.zeros(4)
     tpy = np.zeros(4)
     tpz = np.zeros(4)
     node_flag = np.zeros(4)
 
-    tpx[0] = float(tab[5])
-    tpy[0] = float(tab[6])
-    tpz[0] = float(tab[7])
+    tpx[0] = np.float64(tab[5])
+    tpy[0] = np.float64(tab[6])
+    tpz[0] = np.float64(tab[7])
 
-    tpx[1] = float(tab[8])
-    tpy[1] = float(tab[9])
-    tpz[1] = float(tab[10])
+    tpx[1] = np.float64(tab[8])
+    tpy[1] = np.float64(tab[9])
+    tpz[1] = np.float64(tab[10])
 
-    tpx[2] = float(tab[11])
-    tpy[2] = float(tab[12])
-    tpz[2] = float(tab[13])
+    tpx[2] = np.float64(tab[11])
+    tpy[2] = np.float64(tab[12])
+    tpz[2] = np.float64(tab[13])
 
-    tpx[3] = float(tab[14])
-    tpy[3] = float(tab[15])
-    tpz[3] = float(tab[16])
+    tpx[3] = np.float64(tab[14])
+    tpy[3] = np.float64(tab[15])
+    tpz[3] = np.float64(tab[16])
 
     for work_i in range(17):
-        work_xyz.append(float(tab[work_i]))
+        work_xyz = np.append(work_xyz, float(tab[work_i]))
 
     #  scaling coordinates
     tpx = tpx * x_scale
@@ -516,11 +519,11 @@ synth_flag       = np.zeros(points_number, dtype=int)
 
 previous_release = 0.0
 
-
+logfile = open(file_prefix + 'log90.txt', 'a')
+startbigpentla = time.time()
 for i1 in range(i1_range):
-    logfile = open(file_prefix + 'log90.txt', 'a')
+    inlooptime = time.time()
     logfile.write("{:8.0f} {:7.4f} {:20.8f}".format(i1, t, time.time()))
-    logfile.close()
     time_diff = 0.0 - time.time()
     ii = i1 + 1 + i1_offset
     matrix_left = 2 * matrix_G + dt * (matrix_A + matrix_A1 * f_impulse(t))
@@ -560,9 +563,8 @@ for i1 in range(i1_range):
     print(">> IT", ii,"Inn IT 0 synth norm", norm(total_synth),
           "Pnodes =", total_production_nodes, end=" ")
     vector_f_times_right += total_synth
-    logfile = open(file_prefix + 'log90.txt', 'a')
+
     logfile.write("{:8.0f}".format(total_production_nodes))
-    logfile.close()
     previous_step_synthesis = synthesis_vector[:]
     inner_iteration = 1
     solution = bicgs(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)  #SaporPuppis solution = bicgs(matrix_left, vector_f_times_right, x0=vector_f, tol=toler, maxiter=maxit)
@@ -702,9 +704,7 @@ for i1 in range(i1_range):
             releasing_nodes += 1
     average_release = (release + previous_release) / 2.0
     print("==> TOTAL RELEASE =", average_release, end=" ")
-    logfile = open(file_prefix + 'log90.txt', 'a')
     logfile.write("{:13.6f} {:8.0f}".format(average_release,inner_iteration))
-    logfile.close()
     previous_release = release
 
 
@@ -727,9 +727,7 @@ for i1 in range(i1_range):
                     zone3_nt_m += nt_mass
         print("   ====> TOTAL (AND DETAILED...) NT MASS =", total_nt_mass, zone1_nt_m,
               zone2_nt_m, zone3_nt_m, end=" ")
-        logfile = open(file_prefix + 'log90.txt', 'a')
         logfile.write("{:20.8f} {:20.8f} {:20.8f} {:20.8f}".format(total_nt_mass,zone1_nt_m,zone2_nt_m,zone3_nt_m))
-        logfile.close()
 
 
     # Calculate synthesised amount of neurotransmitter !!!!!!!!!!!!!!!!!!!
@@ -741,9 +739,7 @@ for i1 in range(i1_range):
             for n_of_node in range(4):
                 prod_nt_mass += 0.25 * delta_f[nt_vol[n_of_tet][n_of_node]] * nt_vol[n_of_tet][4]
         print("==(!!!)=> PRODUCED NT MASS =", prod_nt_mass, end=" ")
-        logfile = open(file_prefix + 'log90.txt', 'a')
         logfile.write("{:20.8f}".format(prod_nt_mass))
-        logfile.close()
 
 
     # Plot total NT mass vs time every n_timep'th iteration (but CALCULATE every iteration)
@@ -762,16 +758,14 @@ for i1 in range(i1_range):
 
 
     print(" TIME = ", time_diff, " maxit ", solution[1], " minf ", min(vector_f), datetime.now())
-    logfile = open(file_prefix + 'log90.txt', 'a')
-    logfile.write("{:15.6f}".format(time_diff))
-    logfile.write('\n')
-    logfile.close()
-
+    logfile.write("{:15.6f}\n".format(time_diff))
 
     t += dt
+    cprint("Iteration time: "+str((time.time()-inlooptime)+" s", "black", "on_light_magenta")
+    cprint("Mean iteration time: "+str((time.time()-startbigpentla)/(i1+1))+" s", "black", "on_light_magenta")
     # return to loop start, iterate over
 
-
+cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
 # END PLOT
 
 
