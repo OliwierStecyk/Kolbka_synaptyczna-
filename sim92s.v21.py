@@ -253,8 +253,8 @@ except:
     print("File ele90.1b.txt not found")
     exit(1)
 
-nt_vol = np.array([])  # SaporPuppis    nt_vol =[]
-work_xyz = np.array([]) # SaporPuppis    work_xyz =[]
+nt_vol = [] # SaporPuppis    nt_vol =[]
+work_xyz = [] # SaporPuppis    work_xyz =[]
 vol_pool_n = np.zeros(pool_range)   # Number of tets in flag value class
 vol_pool_v = np.zeros(pool_range)   # volumes (20 just for sure to grab all flags)
 total_volume = 0.0
@@ -263,14 +263,18 @@ i = 0
 for line in file:
     i += 1
     tab = line.split()
-    #element_number = int(tab[0])  #SaporPuppis i tak nikt tego nie używa Rather not used later !! (??)  SaporPuppis
-    point_numbers = np.array([int(tab[1]) - 1, int(tab[2]) - 1, int(tab[3]) - 1, int(tab[4]) - 1])
-    pn = point_numbers
-    pn = np.append( pn, float(tab[17]) * vol_scale)
-    #  In position 22 there is a code: -3 synthesis -2 inside -1 secretion
-    pn =  np.append(int(tab[27]))
-    nt_vol = np.append(nt_vol, pn)
 
+    stt = time.time()
+    
+    #element_number = int(tab[0])  #SaporPuppis i tak nikt tego nie używa Rather not used later !! (??)  SaporPuppis
+    point_numbers = [np.int32(tab[1]) - 1, np.int32(tab[2]) - 1, np.int32(tab[3]) - 1, np.int32(tab[4]) - 1]
+    pn = point_numbers+[np.float64(tab[17]) * vol_scale, np.int32(tab[27])]
+    
+    #pn.append([float(tab[17]) * vol_scale, np.int32(tab[27])])
+    #  In position 22 there is a code: -3 synthesis -2 inside -1 secretion
+    nt_vol.append(pn) #= np.append(nt_vol, pn)
+    
+    cprint(str(time.time()-stt), "green", "on_black")
     tpx = np.zeros(4)
     tpy = np.zeros(4)
     tpz = np.zeros(4)
@@ -292,8 +296,12 @@ for line in file:
     tpy[3] = np.float64(tab[15])
     tpz[3] = np.float64(tab[16])
 
-    for work_i in range(17):
-        work_xyz = np.append(work_xyz, float(tab[work_i]))
+    work_xyz.extend(map(float, tab[:17]))  
+    '''
+    SapporPuppis
+    for i in range(17):
+        work_xyz.append(float(tab[i]))
+    '''
 
     #  scaling coordinates
     tpx = tpx * x_scale
@@ -351,6 +359,9 @@ for line in file:
     if (i % n_print) == 0:
         print(" TET #", i, ", TIME", datetime.now())
 
+nt_vol = np.array(nt_vol)  # SaporPuppis
+print("nt_vol: ", nt_vol)
+ 
 
 print("\n Number of tetrahedra = ", i, " with volume ", total_volume)
 print("\n Coords: ", min(xxx),max(xxx), min(yyy), max(yyy), min(zzz), max(zzz))
@@ -524,6 +535,7 @@ startbigpentla = time.time()
 for i1 in range(i1_range):
     inlooptime = time.time()
     logfile.write("{:8.0f} {:7.4f} {:20.8f}".format(i1, t, time.time()))
+    
     time_diff = 0.0 - time.time()
     ii = i1 + 1 + i1_offset
     matrix_left = 2 * matrix_G + dt * (matrix_A + matrix_A1 * f_impulse(t))
@@ -761,7 +773,7 @@ for i1 in range(i1_range):
     logfile.write("{:15.6f}\n".format(time_diff))
 
     t += dt
-    cprint("Iteration time: "+str((time.time()-inlooptime)+" s", "black", "on_light_magenta")
+    cprint("Iteration time: "+ str((time.time()-inlooptime)) +" s", "black", "on_light_magenta")
     cprint("Mean iteration time: "+str((time.time()-startbigpentla)/(i1+1))+" s", "black", "on_light_magenta")
     # return to loop start, iterate over
 
