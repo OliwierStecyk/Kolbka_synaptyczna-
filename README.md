@@ -1,4 +1,5 @@
 ### do przeczytania 
+ - https://nealhughes.net/cython1/
  - https://numpy.org/doc/stable/reference/arrays.nditer.html
  - https://cython.readthedocs.io/en/latest/src/userguide/parallelism.html#cython.parallel.prange
  - https://cython.readthedocs.io/en/latest/src/tutorial/cython_tutorial.html#id4
