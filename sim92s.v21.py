@@ -1,5 +1,5 @@
 from termcolor import colored, cprint
-
+debugprint = False
 # SIM92s ======
 # better mesh - version III.2025 ====
 
@@ -25,6 +25,7 @@ import numpy as np
 # Plot description and layout
 from matplotlib import rcParams
 import os
+import json
 PLOTPATH = './plots/'   # SaporPuppis -- tutaj trzeba zrobić sobie folder
 if not os.path.exists(PLOTPATH):
     os.makedirs(PLOTPATH)
@@ -81,6 +82,7 @@ def coefficients(tpx, tpy, tpz):
         matrix[i, 1] = tpy[i]
         matrix[i, 2] = tpz[i]
         matrix[i, 3] = 1
+
     sol1 = np.linalg.solve(matrix, v1)
     sol2 = np.linalg.solve(matrix, v2)
     sol3 = np.linalg.solve(matrix, v3)
@@ -254,7 +256,7 @@ except:
     exit(1)
 
 nt_vol = [] # SaporPuppis    nt_vol =[]
-work_xyz = [] # SaporPuppis    work_xyz =[]
+# SaporPuppis    work_xyz =[]
 vol_pool_n = np.zeros(pool_range)   # Number of tets in flag value class
 vol_pool_v = np.zeros(pool_range)   # volumes (20 just for sure to grab all flags)
 total_volume = 0.0
@@ -263,8 +265,6 @@ i = 0
 for line in file:
     i += 1
     tab = line.split()
-
-    stt = time.time()
     
     #element_number = int(tab[0])  #SaporPuppis i tak nikt tego nie używa Rather not used later !! (??)  SaporPuppis
     point_numbers = [np.int32(tab[1]) - 1, np.int32(tab[2]) - 1, np.int32(tab[3]) - 1, np.int32(tab[4]) - 1]
@@ -274,7 +274,6 @@ for line in file:
     #  In position 22 there is a code: -3 synthesis -2 inside -1 secretion
     nt_vol.append(pn) #= np.append(nt_vol, pn)
     
-    cprint(str(time.time()-stt), "green", "on_black")
     tpx = np.zeros(4)
     tpy = np.zeros(4)
     tpz = np.zeros(4)
@@ -296,12 +295,8 @@ for line in file:
     tpy[3] = np.float64(tab[15])
     tpz[3] = np.float64(tab[16])
 
-    work_xyz.extend(map(float, tab[:17]))  
-    '''
-    SapporPuppis
-    for i in range(17):
-        work_xyz.append(float(tab[i]))
-    '''
+        # sappor puppis work_xyz.extend(map(float, tab[:17]))  
+
 
     #  scaling coordinates
     tpx = tpx * x_scale
@@ -313,10 +308,17 @@ for line in file:
     # =============================================================================
 
     # Adjust graph vectors
+    xxx[point_numbers] = tpx  # czasem indeks point_numbers[i_xyz] powtarza się więc nadpisujemy wartość, nie wiadomo czy zamierzone działanie
+    yyy[point_numbers] = tpy  # -||-
+    zzz[point_numbers] = tpz  # -||-
+
+    '''
+    sappor puppis
     for i_xyz in range(4):
         xxx[point_numbers[i_xyz]] = tpx[i_xyz]  # czasem indeks point_numbers[i_xyz] powtarza się więc nadpisujemy wartość, nie wiadomo czy zamierzone działanie
         yyy[point_numbers[i_xyz]] = tpy[i_xyz]  # -||-
         zzz[point_numbers[i_xyz]] = tpz[i_xyz]  # -||-
+    '''
 
     #  scaling tab[17] to detect small volumes
     vol = float(tab[17]) * vol_scale
@@ -330,20 +332,14 @@ for line in file:
     coefficients_tab = coefficients(tpx, tpy, tpz)
 
     for point_1 in range(4):
+        (A1, B1, C1, D1) = coefficients_tab[point_1]
+        global_point_1 = point_numbers[point_1]
         for point_2 in range(point_1, 4):
-            A1 = coefficients_tab[point_1][0]
-            B1 = coefficients_tab[point_1][1]
-            C1 = coefficients_tab[point_1][2]
-            D1 = coefficients_tab[point_1][3]
+            # sapporpuppis D1 = coefficients_tab[point_1][3] itp dla a,b,c
+            (A2, B2, C2, D2) = coefficients_tab[point_2]    #A2 = coefficients_tab[point_2][0] itp dla a,b,c,d
 
-            A2 = coefficients_tab[point_2][0]
-            B2 = coefficients_tab[point_2][1]
-            C2 = coefficients_tab[point_2][2]
-            D2 = coefficients_tab[point_2][3]
+            contribution = diffusion * vol * (A1 * A2 + B1 * B2 + C1 * C2) #wartośći [-1,1]
 
-            contribution = diffusion * vol * (A1 * A2 + B1 * B2 + C1 * C2)
-
-            global_point_1 = point_numbers[point_1]
             global_point_2 = point_numbers[point_2]
 
             if point_1 == point_2:
@@ -355,9 +351,30 @@ for line in file:
 
                 matrix_G[global_point_1, global_point_2] += vol / 20.0
                 matrix_G[global_point_2, global_point_1] += vol / 20.0
+print('aaaaaaaa\n')
+print(matrix_A)
+# Save matrices `matrix_A` and `matrix_G` in CSR format to a JSON file for debugging purposes.
+# Legend:
+# - `shape`: Tuple representing the dimensions of the matrix.
+# - `data`: Non-zero values of the matrix.
+# - `indices`: Column indices corresponding to the `data` values.
+# - `indptr`: Row pointer array that marks the start of each row in `data` and `indices`.
 
-    if (i % n_print) == 0:
-        print(" TET #", i, ", TIME", datetime.now())
+if debugprint:
+    with open('./Matrix_A.txt', 'w') as f:
+        matrix_A_csr = matrix_A.tocsr()   
+        f.write("Matrix A:\n")
+        for i in range(matrix_A_csr.shape[0]):
+            row = matrix_A_csr.getrow(i).toarray().flatten()
+            f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
+
+    with open('./Matrix_G.txt', 'w') as f:
+        matrix_G_csr = matrix_G.tocsr()
+        f.write("\nMatrix G:\n")
+        for i in range(matrix_G_csr.shape[0]):
+            row = matrix_G_csr.getrow(i).toarray().flatten()
+            f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
+
 
 nt_vol = np.array(nt_vol)  # SaporPuppis
 print("nt_vol: ", nt_vol)
@@ -429,6 +446,15 @@ for line in file:
         matrix_A1[node3,node2] += off_diagonal_contribution
         matrix_A1[node2,node1] += off_diagonal_contribution
         matrix_A1[node1,node2] += off_diagonal_contribution
+
+if debugprint:
+    with open('./Matrix_A1.txt', 'w') as f:
+        matrix_A1_csr = matrix_A1.tocsr()   
+        f.write("Matrix A1:\n")
+        for i in range(matrix_A1_csr.shape[0]):
+            row = matrix_A1_csr.getrow(i).toarray().flatten()
+            f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
+
 print("There are", no_of_tra, "triangles,", no_of_trs, "secreting, with areas:")
 print(area_t[0], area_t[1],area_t[2],'...',area_t[no_of_trs-3],area_t[no_of_trs-2],area_t[no_of_trs-1])
 print("Total secretion area is", total_area_s, " total area2 is", total_area_2, " total area is", total_area)
