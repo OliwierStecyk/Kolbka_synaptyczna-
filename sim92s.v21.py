@@ -150,9 +150,9 @@ vs_scale = 1.0
 
 
 # Initialize values of coefficients of density function
-a_dens = 7500.00   #  Max of Gauss curve - FORMER VALUE !!!!!!!!
+a_dens = 370.0   #  Max of Gauss curve - FORMER VALUE !!!!!!!!
 b_dens =   -0.28   #  sigma2 of Gauss curve
-c_dens =    0.00   #  coefficient of distortion of Gauss curve
+c_dens =    0.01   #  coefficient of distortion of Gauss curve
 
 
 #  Secretion: read number of points (nodes) and node flags from node file
@@ -376,7 +376,7 @@ if debugprint:
             f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
 
 
-nt_vol = np.array(nt_vol)  # SaporPuppis
+
 print("nt_vol: ", nt_vol)
  
 
@@ -649,7 +649,7 @@ for i1 in range(i1_range):
 
         solution = bicgs(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit) #SaporPuppis solution = bicgs(matrix_left, vector_f_times_right, x0=vector_f, tol=toler, maxiter=maxit)
         vector_f_new = solution[0]
-
+        print( vector_f_new)
         # PRINT AND PLOT SYNTHESIS (PRODUCTION)
         if production_flag == 1:
             if np.array_equal(synthesis_vector, np.zeros(points_number)):
@@ -666,11 +666,11 @@ for i1 in range(i1_range):
                     ax.grid(True)   ###  >>>  added 11.XI.2024 to make similar to gr plots
                     ax = fig.add_subplot(111, projection='3d', alpha=1.0)
 
-                    ax.scatter(xxx, yyy, zzz, synthesis_vector, s=v_scatt, c=synthesis_vector,
+                    ax.scatter(xxx, yyy, zzz, 'z', s=v_scatt, c=synthesis_vector,
                                cmap=cmap_YoB, vmin=0.0, vmax=3E-3, lw=0)
                     plt.tight_layout()
                     ax.set_zlim(zfliml,zflimh)
-                    cb = fig.colorbar(colmap)
+                    cb = fig.colorbar(colmap, ax=ax) #SaporPuppis cb = fig.colorbar(colmap)
                     plt.savefig(file_prefix + PLOTPATH+ 'gsss90nr' + str(ii) + '.png')
                     plt.close()
                     #  PLOT TWO-DIMENSIONAL
@@ -802,6 +802,26 @@ for i1 in range(i1_range):
     cprint("Iteration time: "+ str((time.time()-inlooptime)) +" s", "black", "on_light_magenta")
     cprint("Mean iteration time: "+str((time.time()-startbigpentla)/(i1+1))+" s", "black", "on_light_magenta")
     # return to loop start, iterate over
+
+with open('./debugprint/matrix_left.txt', 'w') as f:
+        matrix_left_csr = matrix_left.tocsr()   
+        f.write("matrix_left:\n")
+        for i in range(matrix_left_csr.shape[0]):
+            row = matrix_left_csr.getrow(i).toarray().flatten()
+            f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
+
+with open('./debugprint/matrix_right.txt', 'w') as f:
+        matrix_right_csr = matrix_right.tocsr()   
+        f.write("matrix_right:\n")
+        for i in range(matrix_right_csr.shape[0]):
+            row = matrix_right_csr.getrow(i).toarray().flatten()
+            f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
+
+with open('./debugprint/iter_data.json', 'w') as f:
+    json.dumps({"iter_t": iter_t, "iter_v": iter_v})
+
+with open('./debugprint/scatt.json', 'w') as f:
+    json.dumps({"rrr": rrr, "vector_f": vector_f})
 
 cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
 # END PLOT
