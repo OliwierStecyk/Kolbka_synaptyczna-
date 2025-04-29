@@ -558,12 +558,14 @@ previous_release = 0.0
 
 logfile = open(file_prefix + 'log90.txt', 'a')
 startbigpentla = time.time()
+
 for i1 in range(i1_range):
     inlooptime = time.time()
     logfile.write("{:8.0f} {:7.4f} {:20.8f}".format(i1, t, time.time()))
     
     time_diff = 0.0 - time.time()
     ii = i1 + 1 + i1_offset
+
     matrix_left = 2 * matrix_G + dt * (matrix_A + matrix_A1 * f_impulse(t))
     matrix_right = 2 * matrix_G - dt * (matrix_A + matrix_A1 * f_impulse(t - dt))
     time_diff += time.time()
@@ -576,10 +578,12 @@ for i1 in range(i1_range):
     sol_wo_p = bicgs(matrix_left, vector_f_times_right,x0=vector_f,atol=toler,maxiter=maxit) #SaporPuppis sol_wo_p = bicgs(matrix_left, vector_f_times_right,x0=vector_f,tol=toler,maxiter=maxit)
     time_diff += time.time()
     vector_f_wo_p = sol_wo_p[0]
-    for ind in range(points_number):
-        synthesis_vector[ind] = 0.0
-        synth_flag[ind] = 0
+
+    synthesis_vector.fill(0.0)
+    synth_flag.fill(0)
+
     total_production_nodes = 0
+
     # print(" DETECT ROWS !! ")
     for row in nt_vol:
         # print(row, end=" " )
@@ -803,25 +807,26 @@ for i1 in range(i1_range):
     cprint("Mean iteration time: "+str((time.time()-startbigpentla)/(i1+1))+" s", "black", "on_light_magenta")
     # return to loop start, iterate over
 
-with open('./debugprint/matrix_left.txt', 'w') as f:
-        matrix_left_csr = matrix_left.tocsr()   
-        f.write("matrix_left:\n")
-        for i in range(matrix_left_csr.shape[0]):
-            row = matrix_left_csr.getrow(i).toarray().flatten()
-            f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
+if debugprint:
+    with open('./debugprint/matrix_left.txt', 'w') as f:
+            matrix_left_csr = matrix_left.tocsr()   
+            f.write("matrix_left:\n")
+            for i in range(matrix_left_csr.shape[0]):
+                row = matrix_left_csr.getrow(i).toarray().flatten()
+                f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
 
-with open('./debugprint/matrix_right.txt', 'w') as f:
-        matrix_right_csr = matrix_right.tocsr()   
-        f.write("matrix_right:\n")
-        for i in range(matrix_right_csr.shape[0]):
-            row = matrix_right_csr.getrow(i).toarray().flatten()
-            f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
+    with open('./debugprint/matrix_right.txt', 'w') as f:
+            matrix_right_csr = matrix_right.tocsr()   
+            f.write("matrix_right:\n")
+            for i in range(matrix_right_csr.shape[0]):
+                row = matrix_right_csr.getrow(i).toarray().flatten()
+                f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
 
-with open('./debugprint/iter_data.json', 'w') as f:
-    json.dumps({"iter_t": iter_t, "iter_v": iter_v})
+    with open('./debugprint/iter_data.json', 'w') as f:
+        json.dumps({"iter_t": iter_t, "iter_v": iter_v})
 
-with open('./debugprint/scatt.json', 'w') as f:
-    json.dumps({"rrr": rrr, "vector_f": vector_f})
+    with open('./debugprint/scatt.json', 'w') as f:
+        json.dumps({"rrr": rrr, "vector_f": vector_f})
 
 cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
 # END PLOT
