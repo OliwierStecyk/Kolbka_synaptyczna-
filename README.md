@@ -21,3 +21,9 @@
 11. prod_nt_mass
 12. time_diff - 524 linijka jest mocne gówno, mierzy w tym gówno kodzie tylko to XD w 533 #  CALCULATE F WITHOUT PRODUCTION
 
+
+#### komendy do profilowania
+
+>>python -m cProfile -o my_program.prof ./kolbka_synaptyczna/sim92s_v21.py
+>>snakeviz .\my_program.prof
+
