@@ -14,7 +14,6 @@ from scipy.sparse.linalg import bicgstab as bicgs
 # Introduction
 import matplotlib as mpl
 from matplotlib import cm
-from numba import jit
 
 # from mpl_toolkits.mplot3d import Axes3D
 # import mpl_toolkits.mplot3d as mp3d
@@ -87,11 +86,6 @@ def coefficients(tpx, tpy, tpz):
     return [sol1, sol2, sol3, sol4]
 
 
-#  Function of production of neurotransmitter -
-def production_V(volume, alfa_i, alfa_mean):
-    production = 0.25 * dt * volume * synthesis_rate * (synthesis_threshold - 0.2 * alfa_i - 0.8 * alfa_mean )
-    return production
-
 
 #  P R O G R A M   S T A R T   ====================================================================
 #  Begin - set parameters
@@ -126,6 +120,11 @@ file_prefix   = './'         #  Unix - ARES
 prob_p = 1.8  #  prob. of release
 prob_q = 0.1  #  prob. of return
 
+
+#  Function of production of neurotransmitter -
+multiplier = 0.25*dt*synthesis_rate
+def production_V(volume, alfa_i, alfa_mean):
+    return volume * multiplier * (synthesis_threshold - 0.2 * alfa_i - 0.8 * alfa_mean )
 
 #  Open log file ------------------
 logfile = open(file_prefix + 'log90.txt', 'w')
@@ -264,8 +263,8 @@ for line in file:
     tab = line.split()
     
     #element_number = int(tab[0])  #SaporPuppis i tak nikt tego nie używa Rather not used later !! (??)  SaporPuppis
-    point_numbers = [np.int32(tab[1]) - 1, np.int32(tab[2]) - 1, np.int32(tab[3]) - 1, np.int32(tab[4]) - 1]
-    pn = point_numbers+[np.float64(tab[17]) * vol_scale, np.int32(tab[27])]
+    point_numbers = [np.int16(tab[1]) - 1, np.int16(tab[2]) - 1, np.int16(tab[3]) - 1, np.int16(tab[4]) - 1]
+    pn = point_numbers+[np.float64(tab[17]) * vol_scale, np.int16(tab[27])]
     
     #pn.append([float(tab[17]) * vol_scale, np.int32(tab[27])])
     #  In position 22 there is a code: -3 synthesis -2 inside -1 secretion
@@ -349,13 +348,14 @@ for line in file:
                 matrix_G[global_point_1, global_point_2] += vol / 20.0
                 matrix_G[global_point_2, global_point_1] += vol / 20.0
 print('aaaaaaaa\n')
-print(matrix_A)
+print(matrix_A) 
 # Save matrices `matrix_A` and `matrix_G` in CSR format to a JSON file for debugging purposes.
 # Legend:
 # - `shape`: Tuple representing the dimensions of the matrix.
 # - `data`: Non-zero values of the matrix.
 # - `indices`: Column indices corresponding to the `data` values.
 # - `indptr`: Row pointer array that marks the start of each row in `data` and `indices`.
+
 
 if debugprint:
     with open('./Matrix_A.txt', 'w') as f:
@@ -375,7 +375,7 @@ if debugprint:
 
 
 print("nt_vol: ", nt_vol)
- 
+
 
 print("\n Number of tetrahedra = ", i, " with volume ", total_volume)
 print("\n Coords: ", min(xxx),max(xxx), min(yyy), max(yyy), min(zzz), max(zzz))
