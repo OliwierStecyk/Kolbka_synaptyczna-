@@ -25,5 +25,6 @@
 #### komendy do profilowania
 
 >>python -m cProfile -o my_program.prof ./kolbka_synaptyczna/sim92s_v21.py
+
 >>snakeviz .\my_program.prof
 
