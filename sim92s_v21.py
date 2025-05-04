@@ -351,7 +351,7 @@ for line in file:
 print("\n Number of tetrahedra = ", i, " with volume ", total_volume)
 print("\n Coords: ", min(xxx),max(xxx), min(yyy), max(yyy), min(zzz), max(zzz))
 
-n_tet = i # n_tet = 16273
+n_tet = i # n_tet = 16273 which is len of nt_vol
 cprint(n_tet, 'green')
 print("  >> volumes: first", nt_vol[0], ", last", nt_vol[n_tet-1])
 file.close()
@@ -400,7 +400,7 @@ for line in file:
     total_area += area_tr
     if int(tab[4]) == -1:  #  The triangle belongs to the secretion zone
         no_of_trs += 1
-        prob = 0.0
+        prob = 0
         area_t.append([area_tr, node1, node2, node3, prob])
         total_area_s += area_tr
         diagonal_contribution = permeability * area_tr / 6.0
@@ -510,7 +510,15 @@ COL1 = nt_vol_np[:, 1].astype(int)
 COL2 = nt_vol_np[:, 2].astype(int)
 COL3 = nt_vol_np[:, 3].astype(int)
 COL4 = nt_vol_np[:, 4]                 # Wartości volume (float)
-COL5 = nt_vol_np[:, 5].astype(int)     # Warunek col5 == -2 
+COL5 = nt_vol_np[:, 5].astype(int)     # Warunek col5 == -2
+NT_VOL_INDX = nt_vol_np[:, :4].astype(int)
+
+
+AREA_T_NP = np.array(area_t, dtype=np.float64)
+NODES_NP = AREA_T_NP[:, 1:4].astype(int)  # Indeksy wierzchołków
+AREAS_NP = AREA_T_NP[:, 0]  # Powierzchnie trójkątów
+
+
 
 def calc_synthesis(arg_vector_f ):
     res_synthesis_vector = np.zeros(points_number)
@@ -569,8 +577,41 @@ def calc_synthesis2(arg_vector_f):
     np.add.at(res_synthesis_vector, COL2[idxs], production_vals2)
     np.add.at(res_synthesis_vector, COL3[idxs], production_vals3)
     res_production_flag = np.any(mask)
+
     return res_synthesis_vector, res_production_flag
 
+def calc_jumps(arg_vector_f: np.ndarray, arg_vector_f_new: np.ndarray)-> tuple:
+    '''
+    args:
+        arg_vector_f: current vector of densities
+        arg_vector_f_new: new vector of densities after production
+
+    returns:
+        number of jumps from below to above
+        number of jumps from above to below
+    '''
+    from_below = (arg_vector_f[COL0] < SYNTHESIS_THRESHOLD) & \
+        (arg_vector_f[COL1] < SYNTHESIS_THRESHOLD) & \
+        (arg_vector_f[COL2] < SYNTHESIS_THRESHOLD) & \
+        (arg_vector_f[COL3] < SYNTHESIS_THRESHOLD)
+    
+    to_above = (arg_vector_f_new[COL0] > SYNTHESIS_THRESHOLD) | \
+                (arg_vector_f_new[COL1] > SYNTHESIS_THRESHOLD) | \
+                (arg_vector_f_new[COL2] > SYNTHESIS_THRESHOLD) | \
+                (arg_vector_f_new[COL3] > SYNTHESIS_THRESHOLD)
+
+    from_above = (arg_vector_f[COL0] > SYNTHESIS_THRESHOLD) | \
+                (arg_vector_f[COL1] > SYNTHESIS_THRESHOLD) | \
+                (arg_vector_f[COL2] > SYNTHESIS_THRESHOLD) | \
+                (arg_vector_f[COL3] > SYNTHESIS_THRESHOLD)
+
+    to_below = (arg_vector_f_new[COL0] < SYNTHESIS_THRESHOLD) & \
+                (arg_vector_f_new[COL1] < SYNTHESIS_THRESHOLD) & \
+                (arg_vector_f_new[COL2] < SYNTHESIS_THRESHOLD) & \
+                (arg_vector_f_new[COL3] < SYNTHESIS_THRESHOLD)
+
+    return np.sum(from_below & to_above), np.sum(from_above & to_below)
+    
 
 print("START", datetime.now())
 # matrix_[G,A,A1] są stałe do końca programu 
@@ -621,6 +662,7 @@ startbigpentla = time.time()
 
 iteration_time = np.array([], dtype=np.float64)
 
+
 for i1 in range(i1_range):
     inlooptime = time.time()
     logfile.write("{:8.0f} {:7.5f} {:20.8f}".format(i1, t, time.time()))
@@ -644,24 +686,22 @@ for i1 in range(i1_range):
     synth_flag.fill(0)
 
     # print(" DETECT ROWS !! ")     Parallelismus
-    t1 = time.time()
     synthesis_vector, synth_flag = calc_synthesis( vector_f)
-    cprint('synthesis time1 '+str(time.time()-t1), 'green')
-    t2 = time.time()
+
     total_production_nodes = np.count_nonzero(synth_flag > 0)
-    cprint('total_production_nodes time '+str(time.time()-t2), 'green')
     # sapor puppis total_production_nodes = sum([1 for i_prod in range(points_number) if synth_flag[i_prod] > 0])
-    t3 = time.time()
+
     vector_f_times_right_copy = vector_f_times_right[:]
     total_synth = 2.0 * synthesis_vector
+
     print(">> IT", ii,"Inn IT 0 synth norm", norm(total_synth),
           "Pnodes =", total_production_nodes, end=" ")
+    
     vector_f_times_right += total_synth
 
     logfile.write("{:8.0f}".format(total_production_nodes))
     previous_step_synthesis = synthesis_vector[:]
     inner_iteration = 1
-    print('copy1 '+str(time.time()-t3), 'green')
 
     t4 = time.time()
     solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
@@ -669,49 +709,14 @@ for i1 in range(i1_range):
     cprint( 'solution '+str(time.time()-t4), 'green')
 
     while inner_iteration < 101:
-        jumps_from_below_to_above = 0
-        jumps_from_above_to_below = 0
 
-        '''
-        for row in nt_vol:  # petla po czworoscianach
-            if np.all(vector_f[row[:4].astype(int)] < SYNTHESIS_THRESHOLD):
-                if np.any(vector_f_new[row[:4].astype(int)] > SYNTHESIS_THRESHOLD):
-                    jumps_from_below_to_above += 1
-            if np.any(vector_f[row[:4].astype(int)] > SYNTHESIS_THRESHOLD):
-                if np.all(vector_f_new[row[:4].astype(int)] < SYNTHESIS_THRESHOLD):
-                    jumps_from_above_to_below += 1
-        '''
-        for row in nt_vol:  # petla po czworoscianach
-            if vector_f[row[0]] < SYNTHESIS_THRESHOLD and vector_f[row[1]] < SYNTHESIS_THRESHOLD and \
-                   vector_f[row[2]] < SYNTHESIS_THRESHOLD and vector_f[row[3]] < SYNTHESIS_THRESHOLD:
-                if vector_f_new[row[0]] > SYNTHESIS_THRESHOLD or vector_f_new[row[1]] > SYNTHESIS_THRESHOLD or \
-                   vector_f_new[row[2]] > SYNTHESIS_THRESHOLD or vector_f_new[row[3]] > SYNTHESIS_THRESHOLD:
-                        jumps_from_below_to_above += 1
-            if vector_f[row[0]] > SYNTHESIS_THRESHOLD or vector_f[row[1]] > SYNTHESIS_THRESHOLD or \
-                   vector_f[row[2]] > SYNTHESIS_THRESHOLD or vector_f[row[3]] > SYNTHESIS_THRESHOLD:
-                if vector_f_new[row[0]] < SYNTHESIS_THRESHOLD and vector_f_new[row[1]] < SYNTHESIS_THRESHOLD and \
-                   vector_f_new[row[2]] < SYNTHESIS_THRESHOLD and vector_f_new[row[3]] < SYNTHESIS_THRESHOLD:
-                        jumps_from_above_to_below += 1
+        jumps_from_below_to_above, jumps_from_above_to_below = calc_jumps(vector_f, vector_f_new)
+
         print("\nABOVE -> BELOW: ",jumps_from_above_to_below, "  BELOW->ABOVE: ",jumps_from_below_to_above)
         vector_f = vector_f_new[:]
         
         #  PRODUCTION
-        production_flag = 0
-        
         synthesis_vector.fill(0)
-        '''
-        for row in nt_vol:
-            if row[5] == -2:   # # # Corrected in 90 version, is it OK????
-                    if vector_f[row[0]] < synthesis_threshold and vector_f[row[1]] < synthesis_threshold and \
-                        vector_f[row[2]] < synthesis_threshold and vector_f[row[3]] < synthesis_threshold:
-                        
-                        mean_f = 0.25 * (vector_f[row[0]]+vector_f[row[1]]+vector_f[row[2]]+vector_f[row[3]])
-                        synthesis_vector[row[0]] += production_V(row[4], vector_f[row[0]], mean_f)
-                        synthesis_vector[row[1]] += production_V(row[4], vector_f[row[1]], mean_f)
-                        synthesis_vector[row[2]] += production_V(row[4], vector_f[row[2]], mean_f)
-                        synthesis_vector[row[3]] += production_V(row[4], vector_f[row[3]], mean_f)
-                        production_flag = 1
-        '''
         synthesis_vector, production_flag = calc_synthesis2(vector_f)
 
         total_synth = synthesis_vector + previous_step_synthesis
@@ -721,7 +726,6 @@ for i1 in range(i1_range):
 
         solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
         vector_f_new = solution[0]
-        print( vector_f_new)
         # PRINT AND PLOT SYNTHESIS (PRODUCTION)
         if production_flag == True:
             if np.array_equal(synthesis_vector, np.zeros(points_number)):
@@ -764,6 +768,8 @@ for i1 in range(i1_range):
     print("In_it=",inner_iteration,", jmps",jumps_from_below_to_above,jumps_from_above_to_below,
           ", s_norm =", norm(total_synth), end=" ")
     vector_f = vector_f_new[:]
+
+    
     if i1>2 and i1<i1_range-2:
         if impulse_y[i1-2] == 1 or impulse_y[i1+2] == 1 or ii%n_plot == 0:
             # PLOT      #  ^ ... WAS  if ii%n_plot==0:
@@ -803,56 +809,62 @@ for i1 in range(i1_range):
 
 
     # Calculate release     TEN FOR WYKONUJE SIE W OPÓR RAZY
-    release = 0.0
+    t1 = time.time()
+    impuls = f_impulse(t)
+    release = 0
     releasing_nodes = 0
-    for triangle_no in range(len(area_t)):
-        tr = area_t[triangle_no]
-        release_contribution = tr[0] * (vector_f[tr[1]] + vector_f[tr[2]] + vector_f[tr[3]])
-        release_contribution *= (f_impulse(t) * dt * permeability / 3.0)
-        prob = np.random.rand()
-        if prob < prob_p:
-            release += release_contribution
-            releasing_nodes += 1
+    if( impuls ):
+        
+        sum_f = vector_f[NODES_NP[:, 0]] + vector_f[NODES_NP[:, 1]] + vector_f[NODES_NP[:, 2]]
+        release_contributions = AREAS_NP * sum_f * (f_impulse(t) * dt * permeability / 3.0)
+
+        probs = np.random.rand(len(area_t)) # losuje z przedziału [0,1) 
+                                            # a potem sprawdzamy bezsensowny warunek niezamierzone działanie?????
+        selected = probs < prob_p
+        release = np.sum(release_contributions[selected])
+        releasing_nodes = np.sum(selected)  # +=1 dla każdego trójkąta
+
     average_release = (release + previous_release) / 2.0
+    
     print("==> TOTAL RELEASE =", average_release, end=" ")
     logfile.write("{:13.6f} {:8.0f}".format(average_release,inner_iteration))
     previous_release = release
-
+    cprint("\nRelease time: "+ str((time.time()-t1)) +" s", "black", "on_white")
 
     # Calculate total amount of neurotransmitter, also in pools
+    t2 = time.time()
     if ii%n_timec==0:
         # Calculate
-        total_nt_mass = 0.0
-        zone1_nt_m = 0.0  #  SYNTHESIS ZONE
-        zone2_nt_m = 0.0  #  INNER ZONE
-        zone3_nt_m = 0.0  #  RELEASE ZONE
-        for number_of_tet in range(n_tet):
-            for number_of_node in range(4):
-                nt_mass = 0.25 * vector_f[nt_vol[number_of_tet][number_of_node]] * nt_vol[number_of_tet][4]
-                total_nt_mass += nt_mass
-                if nt_vol[number_of_tet][5] == -3:
-                    zone1_nt_m += nt_mass
-                if nt_vol[number_of_tet][5] == -2:
-                    zone2_nt_m += nt_mass
-                if nt_vol[number_of_tet][5] == -1:
-                    zone3_nt_m += nt_mass
+        nt_mass = 0.25 * vector_f[NT_VOL_INDX] * COL4[:, np.newaxis]
+        # Suma mas dla każdego czworościanu
+        tet_masses = np.sum(nt_mass, axis=1)
+
+        # całkowita masa
+        total_nt_mass = np.sum(tet_masses)
+
+        # Oblicz masy dla poszczególnych stref
+        zone1_nt_m = np.sum(tet_masses[COL5 == -3])  # SYNTHESIS ZONE
+        zone2_nt_m = np.sum(tet_masses[COL5 == -2])  # INNER ZONE
+        zone3_nt_m = np.sum(tet_masses[COL5 == -1])  # RELEASE ZONE
 
         print("   ====> TOTAL (AND DETAILED...) NT MASS =", total_nt_mass, zone1_nt_m,
               zone2_nt_m, zone3_nt_m, end=" ")
         logfile.write("{:20.8f} {:20.8f} {:20.8f} {:20.8f}".format(total_nt_mass,zone1_nt_m,zone2_nt_m,zone3_nt_m))
-
+    cprint('\ntime of neurotransmiter calculation: '+str(time.time()-t2), 'black', 'on_white')
 
     # Calculate synthesised amount of neurotransmitter !!!!!!!!!!!!!!!!!!!
+    t3 = time.time()
     if ii%n_timec==0:
         # Calculate
-        prod_nt_mass = 0.0
         delta_f = vector_f - vector_f_wo_p
-        for n_of_tet in range(n_tet):
-            for n_of_node in range(4):
-                prod_nt_mass += 0.25 * delta_f[nt_vol[n_of_tet][n_of_node]] * nt_vol[n_of_tet][4]
-        print("==(!!!)=> PRODUCED NT MASS =", prod_nt_mass, end=" ")
-        logfile.write("{:20.8f}".format(prod_nt_mass))
+        delta_m = 0.25 * delta_f[NT_VOL_INDX] * COL4[:, np.newaxis]
+        delta_tet = np.sum(delta_m, axis=1)
+        prod_nt_mass = np.sum(delta_tet)
 
+        print("==(!!!)=> PRODUCED NT MASS =", prod_nt_mass, " ")
+        logfile.write("{:20.8f}".format(prod_nt_mass))
+        
+    cprint('\nsynthesised amount of neurotransmitter: '+str(time.time()-t3), 'black', 'on_white')
 
     # Plot total NT mass vs time every n_timep'th iteration (but CALCULATE every iteration)
     iter_t.append(t)
@@ -880,21 +892,6 @@ for i1 in range(i1_range):
     # return to loop start, iterate over
 
 
-
-    '''with open('./debugprint/matrix_left.txt', 'w') as f:
-            matrix_left_csr = matrix_left.tocsr()   
-            f.write("matrix_left:\n")
-            for i in range(matrix_left_csr.shape[0]):
-                row = matrix_left_csr.getrow(i).toarray().flatten()
-                f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
-
-    with open('./debugprint/matrix_right.txt', 'w') as f:
-            matrix_right_csr = matrix_right.tocsr()   
-            f.write("matrix_right:\n")
-            for i in range(matrix_right_csr.shape[0]):
-                row = matrix_right_csr.getrow(i).toarray().flatten()
-                f.write(" ".join(f"{val:.6f}" for val in row) + "\n")'''
-
 # Plot histogram for iteration_time
 fig = plt.figure()
 plt.bar(range(len(iteration_time)), iteration_time, color='blue')
@@ -916,12 +913,14 @@ plt.tight_layout()
 plt.savefig('./iteration_time_lineplot.png')
 plt.close()
 
+
+''''
 with open('./iter_data.json', 'w') as f:
     (json.dump({"iter_t": iter_t, "iter_v": iter_v}, f, indent=4))
 
 with open('./scattttt.json', 'w') as f:
     json.dump({"rrr": rrr, "vector_f": vector_f}, f, indent=4)
-
+'''
 cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
 # END PLOT
 
