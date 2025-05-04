@@ -58,8 +58,6 @@ def f_impulse(t):
     return np.int8(0)
 
 
-
-
 # tpx, tpy and tpz are tables with coordinates of 4 points
 # returned values are ABCD - coefficients of four shape functions
 def coefficients(tpx, tpy, tpz):
@@ -93,10 +91,10 @@ diffusion           =   6.0
 permeability        =  80.0
 permeability       *=   0.2
 synthesis_rate      =  50
-SYNTHESIS_THRESHOLD = 370
+synthesis_threshold = 370
 pool_range          =  20                  # pool numbers from -10 to +9 (pool_range-10)
 pool_center         =  10
-print("\n DIFF ", diffusion, " PERM ", permeability, " SYNTH_R ", synthesis_rate, " SYNTH_T ", SYNTHESIS_THRESHOLD)
+print("\n DIFF ", diffusion, " PERM ", permeability, " SYNTH_R ", synthesis_rate, " SYNTH_T ", synthesis_threshold)
 dt = 0.00001
 stimulation_cycle = 1.0  #  Cycle high freq /low freq repeated each 1.0 s
 tau = 0.0004             #  Duration of stimulation impuls
@@ -123,7 +121,7 @@ prob_q = 0.1  #  prob. of return
 #  Function of production of neurotransmitter -
 multiplier = 0.25*dt*synthesis_rate
 def production_V(volume, alfa_i, alfa_mean):
-    return volume * multiplier * (SYNTHESIS_THRESHOLD - 0.2 * alfa_i - 0.8 * alfa_mean )
+    return volume * multiplier * (synthesis_threshold - 0.2 * alfa_i - 0.8 * alfa_mean )
 
 #  Open log file ------------------
 logfile = open(file_prefix + 'log90.txt', 'w')
@@ -348,11 +346,11 @@ for line in file:
                 matrix_G[global_point_2, global_point_1] += vol / 20.0
 
 
+
 print("\n Number of tetrahedra = ", i, " with volume ", total_volume)
 print("\n Coords: ", min(xxx),max(xxx), min(yyy), max(yyy), min(zzz), max(zzz))
 
-n_tet = i # n_tet = 16273
-cprint(n_tet, 'green')
+n_tet = i
 print("  >> volumes: first", nt_vol[0], ", last", nt_vol[n_tet-1])
 file.close()
 print(" Volume pool sizes: ", end=" ")
@@ -446,6 +444,7 @@ print("   ====> TOTAL NT MASS =", total_nt_mass)
 iter_t = []
 iter_v = []
 
+
 # ITERATION No. 0
 i1 = 0
 t = t_zero + i1 * dt
@@ -503,74 +502,6 @@ plt.ylim(tyliml, tylimh)
 plt.savefig(file_prefix + PLOTPATH+ 'total90nr' + str(ii) + '.png')
 plt.close()
 
-#preparing data: nt_vol
-nt_vol = np.array(nt_vol, dtype=np.float64)
-COL0 = nt_vol[:, 0].astype(int)     # Indeksy (int)
-COL1 = nt_vol[:, 1].astype(int)
-COL2 = nt_vol[:, 2].astype(int)
-COL3 = nt_vol[:, 3].astype(int)
-COL4 = nt_vol[:, 4]                 # Wartości volume (float)
-COL5 = nt_vol[:, 5].astype(int)     # Warunek col5 == -2 
-
-def calc_synthesis(arg_vector_f ):
-    res_synthesis_vector = np.zeros(points_number)
-    res_synth_flag       = np.zeros(points_number, dtype=np.int16)
-    mask = (COL5 == -2) & \
-        (vector_f[COL0] < SYNTHESIS_THRESHOLD) & \
-        (vector_f[COL1] < SYNTHESIS_THRESHOLD) & \
-        (vector_f[COL2] < SYNTHESIS_THRESHOLD) & \
-        (vector_f[COL3] < SYNTHESIS_THRESHOLD)     # & - logical AND numpy operator
-
-    idxs = np.where(mask)[0]  # Indeksy pasujących wierszy
-
-    # Krok 2: Oblicz mean_f dla pasujących wierszy
-    mean_f = 0.25 * ( arg_vector_f[COL0[idxs]] + arg_vector_f[COL1[idxs]] + 
-        arg_vector_f[COL2[idxs]] + arg_vector_f[COL3[idxs]] )
-    
-    # Krok 3: Zwektoryzowane production_V
-    production_vals0 = production_V(COL4[idxs], arg_vector_f[COL0[idxs]], mean_f)
-    production_vals1 = production_V(COL4[idxs], arg_vector_f[COL1[idxs]], mean_f)
-    production_vals2 = production_V(COL4[idxs], arg_vector_f[COL2[idxs]], mean_f)
-    production_vals3 = production_V(COL4[idxs], arg_vector_f[COL3[idxs]], mean_f)
-
-    np.add.at(res_synthesis_vector, COL0[idxs], production_vals0)
-    np.add.at(res_synthesis_vector, COL1[idxs], production_vals1)
-    np.add.at(res_synthesis_vector, COL2[idxs], production_vals2)
-    np.add.at(res_synthesis_vector, COL3[idxs], production_vals3)
-
-    res_synth_flag[COL0[idxs]] += 1
-    res_synth_flag[COL1[idxs]] += 1
-    res_synth_flag[COL2[idxs]] += 1
-    res_synth_flag[COL3[idxs]] += 1
-
-    return res_synthesis_vector, res_synth_flag
-
-def calc_synthesis2(arg_vector_f):
-    res_synthesis_vector = np.zeros(points_number)
-
-    mask = (COL5 == -2) & \
-        (arg_vector_f[COL0] < SYNTHESIS_THRESHOLD) & \
-        (arg_vector_f[COL1] < SYNTHESIS_THRESHOLD) & \
-        (arg_vector_f[COL2] < SYNTHESIS_THRESHOLD) & \
-        (arg_vector_f[COL3] < SYNTHESIS_THRESHOLD)     # & - logical AND numpy operator
-
-    idxs = np.where(mask)[0]  # Indeksy pasujących wierszy
-
-    mean_f = 0.25 * ( arg_vector_f[COL0[idxs]] + arg_vector_f[COL1[idxs]] + 
-        arg_vector_f[COL2[idxs]] + arg_vector_f[COL3[idxs]] )
-
-    production_vals0 = production_V(COL4[idxs], arg_vector_f[COL0[idxs]], mean_f)
-    production_vals1 = production_V(COL4[idxs], arg_vector_f[COL1[idxs]], mean_f)
-    production_vals2 = production_V(COL4[idxs], arg_vector_f[COL2[idxs]], mean_f)
-    production_vals3 = production_V(COL4[idxs], arg_vector_f[COL3[idxs]], mean_f)
-
-    np.add.at(res_synthesis_vector, COL0[idxs], production_vals0)
-    np.add.at(res_synthesis_vector, COL1[idxs], production_vals1)
-    np.add.at(res_synthesis_vector, COL2[idxs], production_vals2)
-    np.add.at(res_synthesis_vector, COL3[idxs], production_vals3)
-    res_production_flag = np.any(mask)
-    return res_synthesis_vector, res_production_flag
-
 
 print("START", datetime.now())
 # matrix_[G,A,A1] są stałe do końca programu 
@@ -611,8 +542,10 @@ def is_positive_definite_sparse(A):
     except:
         return False
 
+
+
 synthesis_vector = np.zeros(points_number)
-synth_flag       = np.zeros(points_number, dtype=np.int16)
+synth_flag       = np.zeros(points_number, dtype=int)
 
 previous_release = 0.0
 
@@ -643,10 +576,24 @@ for i1 in range(i1_range):
     synthesis_vector.fill(0.0)  # trzeba wyzerować na potrzeby obliczeń
     synth_flag.fill(0)
 
+    total_production_nodes = 0
+
     # print(" DETECT ROWS !! ")     Parallelismus
-    synthesis_vector, synth_flag = calc_synthesis( vector_f)
-        
+    for row in nt_vol:
+        # print(row, end=" " )
+        if row[5] == -2:  # # # CORRECTED IN 90 VERSION, IS IT OK???
+            if vector_f[row[0]] < synthesis_threshold and vector_f[row[1]] < synthesis_threshold and \
+                            vector_f[row[2]] < synthesis_threshold and vector_f[row[3]] < synthesis_threshold:
+                mean_f = 0.25 * (vector_f[row[0]]+vector_f[row[1]]+vector_f[row[2]]+vector_f[row[3]])
+                synthesis_vector[row[0]] += production_V(row[4], vector_f[row[0]], mean_f)
+                synthesis_vector[row[1]] += production_V(row[4], vector_f[row[1]], mean_f)
+                synthesis_vector[row[2]] += production_V(row[4], vector_f[row[2]], mean_f)
+                synthesis_vector[row[3]] += production_V(row[4], vector_f[row[3]], mean_f)
+                synth_flag[row[:4]] += 1
+    # print(" ")
     total_production_nodes = np.count_nonzero(synth_flag > 0)
+    cprint( 'Total production nodes = '+str(total_production_nodes), 'red', 'on_white')
+
     # sapor puppis total_production_nodes = sum([1 for i_prod in range(points_number) if synth_flag[i_prod] > 0])
     
     vector_f_times_right_copy = vector_f_times_right[:]
@@ -668,20 +615,24 @@ for i1 in range(i1_range):
         jumps_from_below_to_above = 0
         jumps_from_above_to_below = 0
         for row in nt_vol:  # petla po czworoscianach
-            if np.all(vector_f[row[:4].astype(int)] < SYNTHESIS_THRESHOLD):
-                if np.any(vector_f_new[row[:4].astype(int)] > SYNTHESIS_THRESHOLD):
-                    jumps_from_below_to_above += 1
-            if np.any(vector_f[row[:4].astype(int)] > SYNTHESIS_THRESHOLD):
-                if np.all(vector_f_new[row[:4].astype(int)] < SYNTHESIS_THRESHOLD):
-                    jumps_from_above_to_below += 1
-        print("\nABOVE -> BELOW: ",jumps_from_above_to_below, "  BELOW->ABOVE: ",jumps_from_below_to_above)
+            if vector_f[row[0]] < synthesis_threshold and vector_f[row[1]] < synthesis_threshold and \
+                   vector_f[row[2]] < synthesis_threshold and vector_f[row[3]] < synthesis_threshold:
+                if vector_f_new[row[0]] > synthesis_threshold or vector_f_new[row[1]] > synthesis_threshold or \
+                   vector_f_new[row[2]] > synthesis_threshold or vector_f_new[row[3]] > synthesis_threshold:
+                        jumps_from_below_to_above += 1
+            if vector_f[row[0]] > synthesis_threshold or vector_f[row[1]] > synthesis_threshold or \
+                   vector_f[row[2]] > synthesis_threshold or vector_f[row[3]] > synthesis_threshold:
+                if vector_f_new[row[0]] < synthesis_threshold and vector_f_new[row[1]] < synthesis_threshold and \
+                   vector_f_new[row[2]] < synthesis_threshold and vector_f_new[row[3]] < synthesis_threshold:
+                        jumps_from_above_to_below += 1
+        print("ABOVE -> BELOW: ",jumps_from_above_to_below, "  BELOW->ABOVE: ",jumps_from_below_to_above)
         vector_f = vector_f_new[:]
-        
+        raise SystemExit(1)
         #  PRODUCTION
         production_flag = 0
         
         synthesis_vector.fill(0)
-        '''
+        
         for row in nt_vol:
             if row[5] == -2:   # # # Corrected in 90 version, is it OK????
                     if vector_f[row[0]] < synthesis_threshold and vector_f[row[1]] < synthesis_threshold and \
@@ -693,11 +644,9 @@ for i1 in range(i1_range):
                         synthesis_vector[row[2]] += production_V(row[4], vector_f[row[2]], mean_f)
                         synthesis_vector[row[3]] += production_V(row[4], vector_f[row[3]], mean_f)
                         production_flag = 1
-        '''
-        synthesis_vector, production_flag = calc_synthesis2(vector_f)
-
+        
+    
         total_synth = synthesis_vector + previous_step_synthesis
-
         # print("  inner IT", inner_iteration+1, "synth n", norm(total_synth), end=" ")
         vector_f_times_right = vector_f_times_right_copy + total_synth
 
@@ -705,7 +654,7 @@ for i1 in range(i1_range):
         vector_f_new = solution[0]
         print( vector_f_new)
         # PRINT AND PLOT SYNTHESIS (PRODUCTION)
-        if production_flag == True:
+        if production_flag == 1:
             if np.array_equal(synthesis_vector, np.zeros(points_number)):
                 print(" OOOOOOOOOOOOOOOOOOO ITER ", ii, " synth_v = 0 !! ")
             else:
@@ -714,7 +663,7 @@ for i1 in range(i1_range):
                 if ii%n_plot == 0:
                     fig = plt.figure()
                     colmap.set_array(synthesis_vector)
-                    print(" mmm ", np.max(synthesis_vector), " mmm ")
+                    print(" mmm ", max(synthesis_vector), " mmm ")
                     colmap.set_clim(0, 0.002)
                     cmap_YoB = plt.get_cmap("YlOrBr")
                     ax.grid(True)   ###  >>>  added 11.XI.2024 to make similar to gr plots
@@ -810,15 +759,14 @@ for i1 in range(i1_range):
         zone3_nt_m = 0.0  #  RELEASE ZONE
         for number_of_tet in range(n_tet):
             for number_of_node in range(4):
-                nt_mass = 0.25 * vector_f[int(nt_vol[number_of_tet, number_of_node])] * nt_vol[number_of_tet, 4]
+                nt_mass = 0.25 * vector_f[nt_vol[number_of_tet][number_of_node]] * nt_vol[number_of_tet][4]
                 total_nt_mass += nt_mass
-                if nt_vol[number_of_tet, 5] == -3:
+                if nt_vol[number_of_tet][5] == -3:
                     zone1_nt_m += nt_mass
-                if nt_vol[number_of_tet, 5] == -2:
+                if nt_vol[number_of_tet][5] == -2:
                     zone2_nt_m += nt_mass
-                if nt_vol[number_of_tet, 5] == -1:
+                if nt_vol[number_of_tet][5] == -1:
                     zone3_nt_m += nt_mass
-
         print("   ====> TOTAL (AND DETAILED...) NT MASS =", total_nt_mass, zone1_nt_m,
               zone2_nt_m, zone3_nt_m, end=" ")
         logfile.write("{:20.8f} {:20.8f} {:20.8f} {:20.8f}".format(total_nt_mass,zone1_nt_m,zone2_nt_m,zone3_nt_m))
@@ -831,7 +779,7 @@ for i1 in range(i1_range):
         delta_f = vector_f - vector_f_wo_p
         for n_of_tet in range(n_tet):
             for n_of_node in range(4):
-                prod_nt_mass += 0.25 * delta_f[int(nt_vol[n_of_tet, n_of_node])] * nt_vol[n_of_tet, 4]
+                prod_nt_mass += 0.25 * delta_f[nt_vol[n_of_tet][n_of_node]] * nt_vol[n_of_tet][4]
         print("==(!!!)=> PRODUCED NT MASS =", prod_nt_mass, end=" ")
         logfile.write("{:20.8f}".format(prod_nt_mass))
 
@@ -879,30 +827,21 @@ for i1 in range(i1_range):
 
 # Plot histogram for iteration_time
 fig = plt.figure()
-plt.bar(range(len(iteration_time)), iteration_time, color='blue')
-plt.xlabel('Iteration Number')
-plt.ylabel('Iteration Time (s)')
-plt.title('Iteration Time per Iteration')
+plt.hist(iteration_time, bins=10000, color='blue', alpha=0.7, edgecolor='black')
+plt.xlabel('Iteration Time (s)')
+plt.ylabel('Frequency')
+plt.title('Histogram of Iteration Times')
 plt.grid(True)
 plt.tight_layout()
-plt.savefig('./iteration_time_barplot.png')
+plt.savefig(PLOTPATH + 'iteration_time_histogram.png')
 plt.close()
 
-fig = plt.figure()
-plt.plot(range(len(iteration_time)), iteration_time, color='blue', linestyle='-')
-plt.xlabel('Iteration Number')
-plt.ylabel('Iteration Time (s)')
-plt.title('Iteration Time per Iteration')
-plt.grid(True)
-plt.tight_layout()
-plt.savefig('./iteration_time_lineplot.png')
-plt.close()
 
 with open('./iter_data.json', 'w') as f:
     (json.dump({"iter_t": iter_t, "iter_v": iter_v}, f, indent=4))
 
-with open('./scattttt.json', 'w') as f:
-    json.dump({"rrr": rrr, "vector_f": vector_f}, f, indent=4)
+with open('./scatt.json', 'w') as f:
+    json.dumps({"rrr": rrr, "vector_f": vector_f}, f, indent=4)
 
 cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
 # END PLOT
