@@ -504,13 +504,13 @@ plt.savefig(file_prefix + PLOTPATH+ 'total90nr' + str(ii) + '.png')
 plt.close()
 
 #preparing data: nt_vol
-nt_vol = np.array(nt_vol, dtype=np.float64)
-COL0 = nt_vol[:, 0].astype(int)     # Indeksy (int)
-COL1 = nt_vol[:, 1].astype(int)
-COL2 = nt_vol[:, 2].astype(int)
-COL3 = nt_vol[:, 3].astype(int)
-COL4 = nt_vol[:, 4]                 # Wartości volume (float)
-COL5 = nt_vol[:, 5].astype(int)     # Warunek col5 == -2 
+nt_vol_np = np.array(nt_vol, dtype=np.float64)
+COL0 = nt_vol_np[:, 0].astype(int)     # Indeksy (int)
+COL1 = nt_vol_np[:, 1].astype(int)
+COL2 = nt_vol_np[:, 2].astype(int)
+COL3 = nt_vol_np[:, 3].astype(int)
+COL4 = nt_vol_np[:, 4]                 # Wartości volume (float)
+COL5 = nt_vol_np[:, 5].astype(int)     # Warunek col5 == -2 
 
 def calc_synthesis(arg_vector_f ):
     res_synthesis_vector = np.zeros(points_number)
@@ -644,11 +644,14 @@ for i1 in range(i1_range):
     synth_flag.fill(0)
 
     # print(" DETECT ROWS !! ")     Parallelismus
+    t1 = time.time()
     synthesis_vector, synth_flag = calc_synthesis( vector_f)
-        
+    cprint('synthesis time1 '+str(time.time()-t1), 'green')
+    t2 = time.time()
     total_production_nodes = np.count_nonzero(synth_flag > 0)
+    cprint('total_production_nodes time '+str(time.time()-t2), 'green')
     # sapor puppis total_production_nodes = sum([1 for i_prod in range(points_number) if synth_flag[i_prod] > 0])
-    
+    t3 = time.time()
     vector_f_times_right_copy = vector_f_times_right[:]
     total_synth = 2.0 * synthesis_vector
     print(">> IT", ii,"Inn IT 0 synth norm", norm(total_synth),
@@ -658,15 +661,18 @@ for i1 in range(i1_range):
     logfile.write("{:8.0f}".format(total_production_nodes))
     previous_step_synthesis = synthesis_vector[:]
     inner_iteration = 1
+    print('copy1 '+str(time.time()-t3), 'green')
 
+    t4 = time.time()
     solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
-    
     vector_f_new = solution[0]
-
+    cprint( 'solution '+str(time.time()-t4), 'green')
 
     while inner_iteration < 101:
         jumps_from_below_to_above = 0
         jumps_from_above_to_below = 0
+
+        '''
         for row in nt_vol:  # petla po czworoscianach
             if np.all(vector_f[row[:4].astype(int)] < SYNTHESIS_THRESHOLD):
                 if np.any(vector_f_new[row[:4].astype(int)] > SYNTHESIS_THRESHOLD):
@@ -674,6 +680,18 @@ for i1 in range(i1_range):
             if np.any(vector_f[row[:4].astype(int)] > SYNTHESIS_THRESHOLD):
                 if np.all(vector_f_new[row[:4].astype(int)] < SYNTHESIS_THRESHOLD):
                     jumps_from_above_to_below += 1
+        '''
+        for row in nt_vol:  # petla po czworoscianach
+            if vector_f[row[0]] < SYNTHESIS_THRESHOLD and vector_f[row[1]] < SYNTHESIS_THRESHOLD and \
+                   vector_f[row[2]] < SYNTHESIS_THRESHOLD and vector_f[row[3]] < SYNTHESIS_THRESHOLD:
+                if vector_f_new[row[0]] > SYNTHESIS_THRESHOLD or vector_f_new[row[1]] > SYNTHESIS_THRESHOLD or \
+                   vector_f_new[row[2]] > SYNTHESIS_THRESHOLD or vector_f_new[row[3]] > SYNTHESIS_THRESHOLD:
+                        jumps_from_below_to_above += 1
+            if vector_f[row[0]] > SYNTHESIS_THRESHOLD or vector_f[row[1]] > SYNTHESIS_THRESHOLD or \
+                   vector_f[row[2]] > SYNTHESIS_THRESHOLD or vector_f[row[3]] > SYNTHESIS_THRESHOLD:
+                if vector_f_new[row[0]] < SYNTHESIS_THRESHOLD and vector_f_new[row[1]] < SYNTHESIS_THRESHOLD and \
+                   vector_f_new[row[2]] < SYNTHESIS_THRESHOLD and vector_f_new[row[3]] < SYNTHESIS_THRESHOLD:
+                        jumps_from_above_to_below += 1
         print("\nABOVE -> BELOW: ",jumps_from_above_to_below, "  BELOW->ABOVE: ",jumps_from_below_to_above)
         vector_f = vector_f_new[:]
         
@@ -810,13 +828,13 @@ for i1 in range(i1_range):
         zone3_nt_m = 0.0  #  RELEASE ZONE
         for number_of_tet in range(n_tet):
             for number_of_node in range(4):
-                nt_mass = 0.25 * vector_f[int(nt_vol[number_of_tet, number_of_node])] * nt_vol[number_of_tet, 4]
+                nt_mass = 0.25 * vector_f[nt_vol[number_of_tet][number_of_node]] * nt_vol[number_of_tet][4]
                 total_nt_mass += nt_mass
-                if nt_vol[number_of_tet, 5] == -3:
+                if nt_vol[number_of_tet][5] == -3:
                     zone1_nt_m += nt_mass
-                if nt_vol[number_of_tet, 5] == -2:
+                if nt_vol[number_of_tet][5] == -2:
                     zone2_nt_m += nt_mass
-                if nt_vol[number_of_tet, 5] == -1:
+                if nt_vol[number_of_tet][5] == -1:
                     zone3_nt_m += nt_mass
 
         print("   ====> TOTAL (AND DETAILED...) NT MASS =", total_nt_mass, zone1_nt_m,
@@ -831,7 +849,7 @@ for i1 in range(i1_range):
         delta_f = vector_f - vector_f_wo_p
         for n_of_tet in range(n_tet):
             for n_of_node in range(4):
-                prod_nt_mass += 0.25 * delta_f[int(nt_vol[n_of_tet, n_of_node])] * nt_vol[n_of_tet, 4]
+                prod_nt_mass += 0.25 * delta_f[nt_vol[n_of_tet][n_of_node]] * nt_vol[n_of_tet][4]
         print("==(!!!)=> PRODUCED NT MASS =", prod_nt_mass, end=" ")
         logfile.write("{:20.8f}".format(prod_nt_mass))
 
