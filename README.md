@@ -1,11 +1,3 @@
-### do przeczytania 
- - https://kompendium.plgrid.pl
- - https://nealhughes.net/cython1/
- - https://numpy.org/doc/stable/reference/arrays.nditer.html
- - https://cython.readthedocs.io/en/latest/src/userguide/parallelism.html#cython.parallel.prange
- - https://cython.readthedocs.io/en/latest/src/tutorial/cython_tutorial.html#id4
- - https://stackoverflow.com/questions/2846653/how-do-i-use-threading-in-python
-
 ### legenda do logfile
 
 1. Iteracja
@@ -21,6 +13,14 @@
 11. prod_nt_mass
 12. time_diff - 524 linijka jest mocne gówno, mierzy w tym gówno kodzie tylko to XD w 533 #  CALCULATE F WITHOUT PRODUCTION
 
+### do przeczytania 
+ - https://www.youtube.com/watch?v=X7vBbelRXn0
+ - https://kompendium.plgrid.pl
+ - https://nealhughes.net/cython1/
+ - https://numpy.org/doc/stable/reference/arrays.nditer.html
+ - https://cython.readthedocs.io/en/latest/src/userguide/parallelism.html#cython.parallel.prange
+ - https://cython.readthedocs.io/en/latest/src/tutorial/cython_tutorial.html#id4
+ - https://stackoverflow.com/questions/2846653/how-do-i-use-threading-in-python
 
 #### komendy do profilowania
 

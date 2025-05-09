@@ -1,4 +1,3 @@
-
 from termcolor import colored, cprint
 debugprint = False
 # SIM92s ======
@@ -19,6 +18,9 @@ from functools import lru_cache
 import matplotlib as mpl
 from matplotlib import cm
 
+from modernglplot import render_moderngl_3d
+
+
 # from mpl_toolkits.mplot3d import Axes3D
 # import mpl_toolkits.mplot3d as mp3d
 mpl.use('Agg')
@@ -35,6 +37,7 @@ if not os.path.exists(PLOTPATH):
 rcParams['font.family'] = 'sans-serif'
 rcParams['font.sans-serif'] = ['Arial']
 rcParams['font.size'] = 16
+
 
 
 # function of initial density of neurotransmitter
@@ -145,7 +148,7 @@ vs_scale = 1.0
 
 
 # Initialize values of coefficients of density function
-a_dens = 370.0   #  Max of Gauss curve - FORMER VALUE !!!!!!!!
+a_dens =    370.0   #  Max of Gauss curve - FORMER VALUE !!!!!!!!
 b_dens =   -0.28   #  sigma2 of Gauss curve
 c_dens =    0.00   #  coefficient of distortion of Gauss curve
 
@@ -352,7 +355,6 @@ print("\n Number of tetrahedra = ", i, " with volume ", total_volume)
 print("\n Coords: ", min(xxx),max(xxx), min(yyy), max(yyy), min(zzz), max(zzz))
 
 n_tet = i # n_tet = 16273 which is len of nt_vol
-cprint(n_tet, 'green')
 print("  >> volumes: first", nt_vol[0], ", last", nt_vol[n_tet-1])
 file.close()
 print(" Volume pool sizes: ", end=" ")
@@ -415,13 +417,6 @@ for line in file:
         matrix_A1[node2,node1] += off_diagonal_contribution
         matrix_A1[node1,node2] += off_diagonal_contribution
 
-if debugprint:
-    with open('./Matrix_A1.txt', 'w') as f:
-        matrix_A1_csr = matrix_A1.tocsr()   
-        f.write("Matrix A1:\n")
-        for i in range(matrix_A1_csr.shape[0]):
-            row = matrix_A1_csr.getrow(i).toarray().flatten()
-            f.write(" ".join(f"{val:.6f}" for val in row) + "\n")
 
 print("There are", no_of_tra, "triangles,", no_of_trs, "secreting, with areas:")
 print(area_t[0], area_t[1],area_t[2],'...',area_t[no_of_trs-3],area_t[no_of_trs-2],area_t[no_of_trs-1])
@@ -660,7 +655,7 @@ previous_release = 0.0
 logfile = open(file_prefix + 'log90.txt', 'a')
 startbigpentla = time.time()
 
-iteration_time = np.array([], dtype=np.float64)
+iteration_time = []
 
 
 for i1 in range(i1_range):
@@ -706,12 +701,11 @@ for i1 in range(i1_range):
     t4 = time.time()
     solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
     vector_f_new = solution[0]
-    cprint( 'solution '+str(time.time()-t4), 'green')
+    #cprint( 'solution '+str(time.time()-t4), 'green')
 
     while inner_iteration < 101:
 
         jumps_from_below_to_above, jumps_from_above_to_below = calc_jumps(vector_f, vector_f_new)
-
         print("\nABOVE -> BELOW: ",jumps_from_above_to_below, "  BELOW->ABOVE: ",jumps_from_below_to_above)
         vector_f = vector_f_new[:]
         
@@ -727,6 +721,7 @@ for i1 in range(i1_range):
         solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
         vector_f_new = solution[0]
         # PRINT AND PLOT SYNTHESIS (PRODUCTION)
+        plots_counter = 0
         if production_flag == True:
             if np.array_equal(synthesis_vector, np.zeros(points_number)):
                 print(" OOOOOOOOOOOOOOOOOOO ITER ", ii, " synth_v = 0 !! ")
@@ -734,6 +729,7 @@ for i1 in range(i1_range):
                 # print(" SYNTHESIS = ", synthesis_vector, "PREVIOUS_SYNTHESIS = ", previous_step_synthesis)
                 #  PLOT THREE-DIMENSIONAL, not in ALL iterations !!!
                 if ii%n_plot == 0:
+                    plots_counter+=1
                     fig = plt.figure()
                     colmap.set_array(synthesis_vector)
                     print(" mmm ", np.max(synthesis_vector), " mmm ")
@@ -769,33 +765,20 @@ for i1 in range(i1_range):
           ", s_norm =", norm(total_synth), end=" ")
     vector_f = vector_f_new[:]
 
-    
+
     if i1>2 and i1<i1_range-2:
         if impulse_y[i1-2] == 1 or impulse_y[i1+2] == 1 or ii%n_plot == 0:
+            plots_counter+=2
             # PLOT      #  ^ ... WAS  if ii%n_plot==0:
+            t5 = time.time()
             vvv = a_g + b_g * vector_f
-            fig = plt.figure()
-            # colmap = cm.ScalarMappable(cmap=cm.hot)
-            colmap.set_array(vvv)
-            colmap.set_clim(vfliml, vflimh)
-            cb = fig.colorbar(colmap, ax=ax) #SaporPuppis cb = fig.colorbar(colmap)
-            cmap_hot = plt.get_cmap("hot")
-            ax = fig.add_subplot(111, projection='3d', alpha=1.0)
-            ax.grid(True)
-            # ax.set_xlabel('x [ micrometer ]')
-            # ax.set_ylabel('y [ micrometer ]')
-            # ax.set_zlabel('z [ micrometer ]')
-            ax.scatter(xxx, yyy, zzz, 'z', s=sss*vvv, c=vvv, cmap=cmap_hot,
-                       vmin=vfliml, vmax=vflimh, lw=0)    #SaporPuppis ax.scatter(xxx, yyy, zzz, vvv, s=sss*vvv, c=vvv, cmap=cmap_hot, vmin=vfliml, vmax=vflimh, lw=0) 
-            plt.xlim(xfliml, xflimh)
-            plt.ylim(yfliml, yflimh)
-            plt.tight_layout()
-            ax.set_zlim(zfliml, zflimh)
-            cb = fig.colorbar(colmap,ax=ax)   #SaporPuppis cb = fig.colorbar(colmap)
-            plt.savefig(file_prefix + PLOTPATH+ 'grph90nr' + str(ii) + '.png', dpi=300)
-            plt.close()
+            
+            render_moderngl_3d(xxx, yyy, zzz, vvv, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, \
+                             PLOTPATH + 'grph90nr' + str(ii) + '.png')
+            
 
-
+            cprint("\ngrph time: "+ str((time.time()-t5)) +" s", "white", "on_black")
+            t6 = time.time()
             fig = plt.figure()
             cm = plt.get_cmap("hot")
             plt.grid(True)
@@ -806,9 +789,9 @@ for i1 in range(i1_range):
             plt.ylim(syliml, sylimh)
             plt.savefig(file_prefix + PLOTPATH+ 'scatt90nr' + str(ii) + '.png')
             plt.close()
+            cprint("\nscatt time: "+ str((time.time()-t6)) +" s", "white", "on_black")
 
-
-    # Calculate release     TEN FOR WYKONUJE SIE W OPÓR RAZY
+    # Calculate release  
     t1 = time.time()
     impuls = f_impulse(t)
     release = 0
@@ -829,7 +812,7 @@ for i1 in range(i1_range):
     print("==> TOTAL RELEASE =", average_release, end=" ")
     logfile.write("{:13.6f} {:8.0f}".format(average_release,inner_iteration))
     previous_release = release
-    cprint("\nRelease time: "+ str((time.time()-t1)) +" s", "black", "on_white")
+    #cprint("\nRelease time: "+ str((time.time()-t1)) +" s", "white", "on_black")
 
     # Calculate total amount of neurotransmitter, also in pools
     t2 = time.time()
@@ -850,7 +833,7 @@ for i1 in range(i1_range):
         print("   ====> TOTAL (AND DETAILED...) NT MASS =", total_nt_mass, zone1_nt_m,
               zone2_nt_m, zone3_nt_m, end=" ")
         logfile.write("{:20.8f} {:20.8f} {:20.8f} {:20.8f}".format(total_nt_mass,zone1_nt_m,zone2_nt_m,zone3_nt_m))
-    cprint('\ntime of neurotransmiter calculation: '+str(time.time()-t2), 'black', 'on_white')
+    #cprint('\ntime of neurotransmiter calculation: '+str(time.time()-t2), 'black', 'on_white')
 
     # Calculate synthesised amount of neurotransmitter !!!!!!!!!!!!!!!!!!!
     t3 = time.time()
@@ -864,12 +847,13 @@ for i1 in range(i1_range):
         print("==(!!!)=> PRODUCED NT MASS =", prod_nt_mass, " ")
         logfile.write("{:20.8f}".format(prod_nt_mass))
         
-    cprint('\nsynthesised amount of neurotransmitter: '+str(time.time()-t3), 'black', 'on_white')
+    #cprint('\nsynthesised amount of neurotransmitter: '+str(time.time()-t3), 'black', 'on_white')
 
     # Plot total NT mass vs time every n_timep'th iteration (but CALCULATE every iteration)
     iter_t.append(t)
     iter_v.append(total_nt_mass)
     if ii%n_timep==0:
+        plots_counter+=1
         fig=plt.figure()
         plt.xlabel('time [s]')
         plt.ylabel('number of vesicles')
@@ -885,8 +869,8 @@ for i1 in range(i1_range):
     logfile.write("{:15.6f}\n".format(time_diff))
 
     t += dt
-    iteration_time = np.append(iteration_time ,np.float64(time.time()-inlooptime))
-
+    iteration_time.append(time.time()-inlooptime)
+    cprint('\nplots number '+str(plots_counter), 'black', 'on_magenta')
     cprint("Iteration time: "+ str((time.time()-inlooptime)) +" s", "black", "on_light_magenta")
     cprint("Mean iteration time: "+str((time.time()-startbigpentla)/(i1+1))+" s", "black", "on_light_magenta")
     # return to loop start, iterate over
