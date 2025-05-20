@@ -6,6 +6,25 @@ from pyrr import Matrix44
 import imageio.v3 as iio 
 
 
+def create_single_grid_vao(ctx, grid_prog, x_range, y_range, z_fixed, step=1.0):
+    lines = []
+
+    # Linie równoległe do osi X na płaszczyźnie XY, dla stałego z = z_fixed
+    for y in np.arange(y_range[0], y_range[1] + step, step):
+        lines.append([x_range[0], y, z_fixed])
+        lines.append([x_range[1], y, z_fixed])
+
+    # Linie równoległe do osi Y na płaszczyźnie XY, dla stałego z = z_fixed
+    for x in np.arange(x_range[0], x_range[1] + step, step):
+        lines.append([x, y_range[0], z_fixed])
+        lines.append([x, y_range[1], z_fixed])
+
+    grid_vertices = np.array(lines, dtype='f4')
+    vbo = ctx.buffer(grid_vertices.tobytes())
+    vao = ctx.simple_vertex_array(grid_prog, vbo, 'in_position')
+    return vao
+
+
 def render_moderngl_3d(xxx, yyy, zzz, vvv, 
                       xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, 
                       output_path, size=(1920, 1080), point_size=3.0):
@@ -21,20 +40,20 @@ def render_moderngl_3d(xxx, yyy, zzz, vvv,
     # Konwersja do float32
     vertices = np.column_stack([xxx, yyy, zzz]).astype('f4')
     colors = normalized_colors.astype('f4')
-    # 3. Shadery GLSL
-    vertex_shader = """
+
+    vertex_shader = f"""
     #version 330
     uniform mat4 mvp;
     in vec3 in_position;
     in float in_color;
     out float v_color;
-    void main() {
+    void main() {{
         gl_Position = mvp * vec4(in_position, 1.0);
         v_color = in_color;
-        gl_PointSize = %f;
-    }
-    """ % point_size
-    
+        gl_PointSize = {point_size};
+    }}
+    """
+
     fragment_shader = """
     #version 330
     uniform float vmin;
@@ -55,14 +74,26 @@ def render_moderngl_3d(xxx, yyy, zzz, vvv,
         fragColor = vec4(color, 1.0);
     }
     """
-    
-    # 4. Kompilacja programu
-    prog = ctx.program(
-        vertex_shader=vertex_shader,
-        fragment_shader=fragment_shader
-    )
-    
-    # 5. Buffery wierzchołków
+
+    grid_vertex_shader = """
+    #version 330
+    uniform mat4 mvp;
+    in vec3 in_position;
+    void main() {
+        gl_Position = mvp * vec4(in_position, 1.0);
+    }
+    """
+    grid_fragment_shader = """
+    #version 330
+    out vec4 fragColor;
+    void main() {
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0);  // czarna siatka
+    }
+    """
+
+    prog = ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
+    grid_prog = ctx.program(vertex_shader=grid_vertex_shader, fragment_shader=grid_fragment_shader)
+
     vbo_verts = ctx.buffer(vertices.tobytes())
     vbo_colors = ctx.buffer(colors.tobytes())
     
@@ -89,19 +120,29 @@ def render_moderngl_3d(xxx, yyy, zzz, vvv,
     mvp = proj * view
     
     # 7. Renderowanie
+    prog['mvp'].write(mvp.astype('f4').tobytes())
+    grid_prog['mvp'].write(mvp.astype('f4').tobytes())
+
     fbo = ctx.framebuffer(
         color_attachments=[ctx.texture(size, 4)],
         depth_attachment=ctx.depth_texture(size)
-    )
+    )       #dobrze
     fbo.use()
-    fbo.clear(0.0, 0.0, 0.0, 1.0)
-    prog['mvp'].write(mvp.astype('f4').tobytes())
+    fbo.clear(1.0, 1.0, 1.0, 1.0)  # Białe tło
     #prog['vmin'].value = vmin
     #prog['vmax'].value = vmax
     
     vao.render(moderngl.POINTS)
-    
-    # 8. Pobranie obrazu
+
+    grid_vao = create_single_grid_vao(
+        ctx, grid_prog,
+        x_range=(xfliml, xflimh),
+        y_range=(yfliml, yflimh),
+        z_fixed=zfliml,  # jedna płaska kratka na dolnej granicy osi Z
+        step=(xflimh - xfliml) / 10.0
+    )
+    grid_vao.render(moderngl.LINES)
+
     img_data = fbo.read(components=3)
     img = Image.frombytes('RGB', size, img_data)
     # 9. Dodanie colorbar
@@ -137,7 +178,7 @@ def add_colorbar(img, vmin, vmax, width=100):
     
     # Stwórz finalny obraz
     colorbar_img = Image.fromarray(hot_colors, 'RGB')
-    final_img = Image.new('RGB', (img.width + width, height))
+    final_img = Image.new('RGB', (img.width + width, height), 'white')
     final_img.paste(img, (0, 0))
     final_img.paste(colorbar_img, (img.width, 0))
     
@@ -150,8 +191,8 @@ def add_colorbar(img, vmin, vmax, width=100):
     except IOError:
         font = ImageFont.load_default()
 
-    draw.text((img.width - 90, 10), str(vmax), fill=(255,255,255), font=font)
-    draw.text((img.width - 90, height-40), str(vmin), fill=(255,255,255), font=font)
+    draw.text((img.width - 90, 10), str(vmax), fill=(0, 0, 0), font=font)
+    draw.text((img.width - 90, height-40), str(vmin), fill=(0, 0, 0), font=font)
     
     return final_img
 
@@ -163,6 +204,7 @@ if __name__ == "__main__":
     yyy = np.random.rand(n) * 10
     zzz = np.random.rand(n) * 10
     vvv = np.random.rand(n) * 25 + 340  # zakres ~340-365
+    vvv1 = np.random.rand(n) * 25 + 220  # zakres ~340-365
     t0 = time.time()
     # Renderowanie
     render_moderngl_3d(
@@ -175,7 +217,7 @@ if __name__ == "__main__":
     print(f'Czas renderowania: {time.time()-t0:.7f} s')
     t3 = time.time()
     render_moderngl_3d(
-        xxx, yyy, zzz, vvv,
+        xxx, yyy, zzz, vvv1,
         xfliml=0, xflimh=10,
         yfliml=0, yflimh=10,
         zfliml=0, zflimh=10,

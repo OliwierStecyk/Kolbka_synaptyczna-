@@ -19,6 +19,7 @@ import matplotlib as mpl
 from matplotlib import cm
 
 from modernglplot import render_moderngl_3d
+from moderngl2 import ModernGLRenderer
 
 
 # from mpl_toolkits.mplot3d import Axes3D
@@ -634,6 +635,7 @@ matrix_right = 2 * matrix_G - dt * (matrix_A + matrix_A1 * f_impulse(t - dt))
 print("MAT_LEFT (AND RIGHT)", matrix_left[0, 0], matrix_left[points_number - 1, points_number - 1])
 print("LEFT AND RIGHT", datetime.now())
 
+Ploter = ModernGLRenderer(xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh)
 
 from scipy.sparse.linalg import eigsh
 def is_positive_definite_sparse(A):
@@ -773,8 +775,7 @@ for i1 in range(i1_range):
             t5 = time.time()
             vvv = a_g + b_g * vector_f
             
-            render_moderngl_3d(xxx, yyy, zzz, vvv, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, \
-                             PLOTPATH + 'grph90nr' + str(ii) + '.png')
+            Ploter.render(vvv, PLOTPATH+'grph90nr'+str(ii)+'.png')
             
 
             cprint("\ngrph time: "+ str((time.time()-t5)) +" s", "white", "on_black")

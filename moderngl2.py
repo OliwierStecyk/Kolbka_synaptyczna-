@@ -5,9 +5,11 @@ from PIL import Image, ImageDraw, ImageFont
 from pyrr import Matrix44
 import imageio.v3 as iio 
 
-
 class ModernGLRenderer:
-    def __init__(self, xxx, yyy, zzz, size=(1920, 1080), point_size=3.0):
+    def __init__(self, xxx, yyy, zzz, 
+                 xfliml, xflimh, yfliml, yflimh, zfliml, zflimh,
+                 size=(1920, 1080), point_size=3.0):
+        
         # Inicjalizacja kontekstu OpenGL (tylko raz)
         self.ctx = moderngl.create_standalone_context(require=330)
         self.ctx.enable(moderngl.DEPTH_TEST | moderngl.PROGRAM_POINT_SIZE)
@@ -23,11 +25,22 @@ class ModernGLRenderer:
             vertex_shader=self._get_vertex_shader(),
             fragment_shader=self._get_fragment_shader()
         )
+        self.grid_prog = self.ctx.program(vertex_shader=self._get_grid_vertex_shader(), 
+                                     fragment_shader=self._get_grid_fragment_shader())
         
         # Inicjalizacja VAO (bez danych o kolorach)
         self.vao = self.ctx.vertex_array(
             self.prog,
-            [(self.vbo_verts, '3f4', 'in_position')]
+            [
+                (self.vbo_verts, '3f4', 'in_position')
+            ]
+        )
+        self.grid_vao = self.create_single_grid_vao(
+            self.ctx, self.grid_prog,
+            x_range=(xfliml, xflimh),
+            y_range=(yfliml, yflimh),
+            z_fixed=zfliml,  # jedna płaska kratka na dolnej granicy osi Z
+            step=(xflimh - xfliml) / 10.0
         )
         
         # Przygotowanie FBO (tylko raz)
@@ -37,7 +50,7 @@ class ModernGLRenderer:
         )
         
         # Ustawienia kamery (tylko raz)
-        self._setup_camera(0, 10, 0, 10, 0, 10)
+        self._setup_camera(xfliml, xflimh, yfliml, yflimh, zfliml, zflimh)
     
     def _get_vertex_shader(self):
         return f"""
@@ -52,7 +65,6 @@ class ModernGLRenderer:
             gl_PointSize = {self.point_size};
         }}
         """
-    
     def _get_fragment_shader(self):
         return """
         #version 330
@@ -74,6 +86,23 @@ class ModernGLRenderer:
             fragColor = vec4(color, 1.0);
         }
         """
+    def _get_grid_vertex_shader(self):
+        return """
+        #version 330
+        uniform mat4 mvp;
+        in vec3 in_position;
+        void main() {
+            gl_Position = mvp * vec4(in_position, 1.0);
+        }
+        """
+    def _get_grid_fragment_shader(self):
+        return """
+        #version 330
+        out vec4 fragColor;
+        void main() {
+            fragColor = vec4(0.0, 0.0, 0.0, 1.0);  // czarna siatka
+        }
+        """
     
     def _setup_camera(self, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh):
         center = np.array([np.mean([xfliml, xflimh]), 
@@ -82,7 +111,8 @@ class ModernGLRenderer:
         radius = max(xflimh-xfliml, yflimh-yfliml, zflimh-zfliml) * 1.5
         proj = Matrix44.perspective_projection(45.0, self.size[0]/self.size[1], 0.1, radius*2)
         view = Matrix44.look_at(
-            (center[0], center[1], center[2] + radius),
+            (xfliml - radius, yflimh, center[2]),
+            #(center[0], center[1], center[2] + radius),
             center,
             (0, 1, 0)
         )
@@ -106,10 +136,12 @@ class ModernGLRenderer:
         
         # Renderowanie
         self.fbo.use()
-        self.fbo.clear(0.0, 0.0, 0.0, 1.0)
+        self.fbo.clear(1.0, 1.0, 1.0, 1.0)
         self.prog['mvp'].write(self.mvp.astype('f4').tobytes())
+        self.grid_prog['mvp'].write(self.mvp.astype('f4').tobytes())
         self.vao.render(moderngl.POINTS)
-        
+        self.grid_vao.render(moderngl.LINES)
+
         # Pobranie obrazu
         img_data = self.fbo.read(components=3)
         img = Image.frombytes('RGB', self.size, img_data)
@@ -137,7 +169,7 @@ class ModernGLRenderer:
         
         # Mapowanie kolorów (hot)
         hot_colors = np.zeros((height, width, 3), dtype=np.uint8)
-        for i in range(height):
+        for i in range(height):                                     # do naprawienia (usunąc fora jakoś)
             val = 1 - i/height
             r = min(255, max(0, int(val * 4 * 255 - 1.5 * 255)))
             g = min(255, max(0, int(val * 2 * 255 - 0.5 * 255)))
@@ -156,10 +188,28 @@ class ModernGLRenderer:
         # Ustaw większą czcionkę
         font = ImageFont.truetype("arial.ttf", 28)
 
-        draw.text((img.width - 90, 10), str(vmax), fill=(255,255,255), font=font)
-        draw.text((img.width - 90, height-40), str(vmin), fill=(255,255,255), font=font)
+        draw.text((img.width - 90, 10), str(vmax), fill=(0,0,0), font=font)
+        draw.text((img.width - 90, height-40), str(vmin), fill=(0,0,0), font=font)
         
         return final_img
+    
+    def create_single_grid_vao(self, ctx, grid_prog, x_range, y_range, z_fixed, step=1.0):
+        lines = []
+
+        # Linie równoległe do osi X na płaszczyźnie XY, dla stałego z = z_fixed
+        for y in np.arange(y_range[0], y_range[1] + step, step):
+            lines.append([x_range[0], y, z_fixed])
+            lines.append([x_range[1], y, z_fixed])
+
+        # Linie równoległe do osi Y na płaszczyźnie XY, dla stałego z = z_fixed
+        for x in np.arange(x_range[0], x_range[1] + step, step):
+            lines.append([x, y_range[0], z_fixed])
+            lines.append([x, y_range[1], z_fixed])
+
+        grid_vertices = np.array(lines, dtype='f4')
+        vbo = ctx.buffer(grid_vertices.tobytes())
+        vao = ctx.simple_vertex_array(grid_prog, vbo, 'in_position')
+        return vao
 
 
 # Przykład użycia:
@@ -171,7 +221,7 @@ if __name__ == "__main__":
     zzz = np.random.rand(n) * 10
     
     # Inicjalizacja renderera (tylko raz)
-    renderer = ModernGLRenderer(xxx, yyy, zzz)
+    renderer = ModernGLRenderer(xxx, yyy, zzz, 0,10,0,10,0,10)
     
     try:
         # Generowanie wielu wykresów
