@@ -3,7 +3,6 @@ import numpy as np
 import moderngl
 from PIL import Image, ImageDraw, ImageFont
 from pyrr import Matrix44
-from numba import cuda, jit
 import imageio.v3 as iio 
 
 
@@ -15,14 +14,13 @@ def render_moderngl_3d(xxx, yyy, zzz, vvv,
     ctx.enable(moderngl.DEPTH_TEST | moderngl.PROGRAM_POINT_SIZE)
     
     # 2. Przygotowanie danych
-    vmin, vmax = np.min(vvv), np.max(vvv)
+    #vmin, vmax = np.min(vvv), np.max(vvv)
+    vmin, vmax = (200, 450) # stały zakres skali
     normalized_colors = (vvv - vmin) / (vmax - vmin)
     
     # Konwersja do float32
-    t = time.time()
     vertices = np.column_stack([xxx, yyy, zzz]).astype('f4')
     colors = normalized_colors.astype('f4')
-    print(f'Przygotowanie danych: {time.time()-t:.7f} s')
     # 3. Shadery GLSL
     vertex_shader = """
     #version 330
@@ -75,7 +73,6 @@ def render_moderngl_3d(xxx, yyy, zzz, vvv,
             (vbo_colors, '1f4', 'in_color')
         ]
     )
-    print(f'Kompilacja shadera: {time.time()-t:.7f} s')
     # 6. Macierze transformacji
     center = np.array([np.mean([xfliml, xflimh]), 
                       np.mean([yfliml, yflimh]), 
@@ -92,14 +89,12 @@ def render_moderngl_3d(xxx, yyy, zzz, vvv,
     mvp = proj * view
     
     # 7. Renderowanie
-    t = time.time()
     fbo = ctx.framebuffer(
         color_attachments=[ctx.texture(size, 4)],
         depth_attachment=ctx.depth_texture(size)
     )
     fbo.use()
     fbo.clear(0.0, 0.0, 0.0, 1.0)
-    print(f'Inicjalizacja FBO: {time.time()-t:.7f} s')
     prog['mvp'].write(mvp.astype('f4').tobytes())
     #prog['vmin'].value = vmin
     #prog['vmax'].value = vmax
@@ -107,14 +102,10 @@ def render_moderngl_3d(xxx, yyy, zzz, vvv,
     vao.render(moderngl.POINTS)
     
     # 8. Pobranie obrazu
-    t = time.time()
     img_data = fbo.read(components=3)
     img = Image.frombytes('RGB', size, img_data)
-    print(f'Pobieranie obrazu: {time.time()-t:.7f} s')
-
     # 9. Dodanie colorbar
     img = add_colorbar(img, vmin, vmax)
-
 
     iio.imwrite(output_path, image = img,
                compression=6)
@@ -126,7 +117,6 @@ def render_moderngl_3d(xxx, yyy, zzz, vvv,
     prog.release()
     fbo.release()
     ctx.release()
-    print(f'Renderowanie: {time.time()-t:.7f} s')
 
 
 def add_colorbar(img, vmin, vmax, width=100):
@@ -154,9 +144,14 @@ def add_colorbar(img, vmin, vmax, width=100):
     # Dodaj etykiety
     draw = ImageDraw.Draw(final_img)
 
-    
-    draw.text((img.width + 10, 10), str(vmax), fill=(255,0,0))
-    draw.text((img.width + 10, height-30), str(vmin), fill=(255,0,0))
+    # Ustaw większą czcionkę
+    try:
+        font = ImageFont.truetype("arial.ttf", 28)
+    except IOError:
+        font = ImageFont.load_default()
+
+    draw.text((img.width - 90, 10), str(vmax), fill=(255,255,255), font=font)
+    draw.text((img.width - 90, height-40), str(vmin), fill=(255,255,255), font=font)
     
     return final_img
 
@@ -184,24 +179,6 @@ if __name__ == "__main__":
         xfliml=0, xflimh=10,
         yfliml=0, yflimh=10,
         zfliml=0, zflimh=10,
-        output_path="output_moderngl.png"
-    )
-    print(f'Czas renderowania 2: {time.time()-t3:.7f} s')
-    t3 = time.time()
-    render_moderngl_3d(
-        xxx, yyy, zzz, vvv,
-        xfliml=0, xflimh=10,
-        yfliml=0, yflimh=10,
-        zfliml=0, zflimh=10,
-        output_path="output_moderngl.png"
-    )
-    print(f'Czas renderowania 2: {time.time()-t3:.7f} s')
-    t3 = time.time()
-    render_moderngl_3d(
-        zzz, xxx, yyy, vvv,
-        xfliml=0, xflimh=10,
-        yfliml=0, yflimh=10,
-        zfliml=0, zflimh=10,
-        output_path="output_moderngl.png"
+        output_path="output_moderngl1.png"
     )
     print(f'Czas renderowania 2: {time.time()-t3:.7f} s')
