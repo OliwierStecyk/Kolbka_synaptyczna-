@@ -1,5 +1,4 @@
 from termcolor import colored, cprint
-debugprint = False
 # SIM92s ======
 # better mesh - version III.2025 ====
 
@@ -14,16 +13,12 @@ import scipy.sparse as sp
 
 from functools import lru_cache
 
-# Introduction
+
+
+# INCLUDE PLOT LIBRARIES
 import matplotlib as mpl
 from matplotlib import cm
 
-from modernglplot import render_moderngl_3d
-from moderngl2 import ModernGLRenderer
-
-
-# from mpl_toolkits.mplot3d import Axes3D
-# import mpl_toolkits.mplot3d as mp3d
 mpl.use('Agg')
 
 import matplotlib.pyplot as plt
@@ -31,7 +26,7 @@ import numpy as np
 # Plot description and layout
 from matplotlib import rcParams
 import os
-import json
+
 PLOTPATH = './plots/'   # SaporPuppis -- tutaj trzeba zrobić sobie folder
 if not os.path.exists(PLOTPATH):
     os.makedirs(PLOTPATH)
@@ -39,7 +34,40 @@ rcParams['font.family'] = 'sans-serif'
 rcParams['font.sans-serif'] = ['Arial']
 rcParams['font.size'] = 16
 
+from multiprocessing import Process, Queue
 
+def render_worker(q, xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh):
+    from modernGLplot import ModernGLRenderer
+    ploter = ModernGLRenderer(xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh)
+    while True:
+        vvv, path = q.get()
+        if vvv is None:
+            break
+        ploter.render(vvv, path)
+
+#from vispyScatt import setup_vispy_scatter_plot, save_vispy_scatter
+#canvas, view, scatter, cmap = setup_vispy_scatter_plot()
+
+def ScattWorker(q, rfc):
+    import matplotlib.pyplot as plt
+    while True:
+        rrr, vector_f, zzz, v_scatt, srliml, srlimh, syliml, sylimh, output_path = q.get()
+        if rrr is None:
+            break
+        CreateScatPlot(rrr, vector_f, zzz, v_scatt, srliml, srlimh, syliml, sylimh, output_path)
+        print(f"Zapisano {output_path}")
+
+def CreateScatPlot(rrr, vector_f, zzz, zfliml, zflimh, v_scatt, srliml, srlimh, syliml, sylimh, output_path):
+    fig = plt.figure()
+    cm = plt.get_cmap("hot")
+    plt.grid(True)
+    plt.xlabel('r [ micrometer ]')
+    plt.ylabel(' density (number of vesicles per cubic micrometer)')
+    plt.scatter(rrr, vector_f, cmap=cm, c=zzz, vmin=zfliml, vmax=zflimh, s=v_scatt, lw=0)
+    plt.xlim(srliml, srlimh)
+    plt.ylim(syliml, sylimh)
+    plt.savefig(output_path)        #file_prefix + PLOTPATH+ 'scatt90nr' + str(ii) + '.png'
+    plt.close()
 
 # function of initial density of neurotransmitter
 def init_densities( xxx: np.array, yyy: np.array, zzz: np.array, a_dens, b_dens, c_dens)-> np.array:
@@ -60,9 +88,6 @@ def f_impulse(t):
             if freq_low * fraction < np.floor(freq_low * (fraction + offset_low + tau)):
                 return np.int8(1)
     return np.int8(0)
-
-
-
 
 # tpx, tpy and tpz are tables with coordinates of 4 points
 # returned values are ABCD - coefficients of four shape functions
@@ -87,8 +112,6 @@ def coefficients(tpx, tpy, tpz):
     sol3 = np.linalg.solve(matrix, v3)
     sol4 = np.linalg.solve(matrix, v4)
     return [sol1, sol2, sol3, sol4]
-
-
 
 #  P R O G R A M   S T A R T   ====================================================================
 #  Begin - set parameters
@@ -515,7 +538,6 @@ NODES_NP = AREA_T_NP[:, 1:4].astype(int)  # Indeksy wierzchołków
 AREAS_NP = AREA_T_NP[:, 0]  # Powierzchnie trójkątów
 
 
-
 def calc_synthesis(arg_vector_f ):
     res_synthesis_vector = np.zeros(points_number)
     res_synth_flag       = np.zeros(points_number, dtype=np.int16)
@@ -608,7 +630,6 @@ def calc_jumps(arg_vector_f: np.ndarray, arg_vector_f_new: np.ndarray)-> tuple:
 
     return np.sum(from_below & to_above), np.sum(from_above & to_below)
     
-
 print("START", datetime.now())
 # matrix_[G,A,A1] są stałe do końca programu 
 matrix_G2 = matrix_G.tocsr()
@@ -627,27 +648,9 @@ MATRIX_RIGHT = (MATRIX_RIGHT0, MATRIX_RIGHT1)
 matrix_left = MATRIX_LEFT[f_impulse(t)]
 matrix_right = MATRIX_RIGHT[f_impulse(t - dt)]
 
-'''
-sapor puppies
-matrix_left = 2 * matrix_G + dt * (matrix_A + matrix_A1 * f_impulse(t))
-matrix_right = 2 * matrix_G - dt * (matrix_A + matrix_A1 * f_impulse(t - dt))
-'''
 print("MAT_LEFT (AND RIGHT)", matrix_left[0, 0], matrix_left[points_number - 1, points_number - 1])
 print("LEFT AND RIGHT", datetime.now())
 
-Ploter = ModernGLRenderer(xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh)
-
-from scipy.sparse.linalg import eigsh
-def is_positive_definite_sparse(A):
-    # Sprawdź czy A jest kwadratowa
-    if A.shape[0] != A.shape[1]:
-        return False
-    try:
-        # oblicz najmniejszą wartość własną
-        min_eigval = eigsh(A, k=1, which='SA', return_eigenvectors=False)[0]
-        return min_eigval > 0
-    except:
-        return False
 
 synthesis_vector = np.zeros(points_number)
 synth_flag       = np.zeros(points_number, dtype=np.int16)
@@ -658,302 +661,306 @@ logfile = open(file_prefix + 'log90.txt', 'a')
 startbigpentla = time.time()
 
 iteration_time = []
+if __name__ == '__main__':
+    render_queue = Queue()
+    render_proc = Process(target=render_worker, args=(render_queue, xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh))
+    render_proc.start()
+    rfc=0
+    plot_queue = Queue()
+    plot_proc = Process(target=ScattWorker, args=(plot_queue,rfc))
+    plot_proc.start()
 
-
-for i1 in range(i1_range):
-    inlooptime = time.time()
-    logfile.write("{:8.0f} {:7.5f} {:20.8f}".format(i1, t, time.time()))
-    
-    ii = i1 + 1 + i1_offset
-
-    matrix_left = MATRIX_LEFT[f_impulse(t)]
-    matrix_right = MATRIX_RIGHT[f_impulse(t - dt)]
-
-    #  SYNTHESIS (production) - calculate, print and plot
-    vector_f_times_right = matrix_right.dot(vector_f)
-
-    #  CALCULATE F WITHOUT PRODUCTION
-    time_diff = 0.0 - time.time()
-    sol_wo_p = sp.linalg.cg(matrix_left, vector_f_times_right,x0=vector_f,atol=toler,maxiter=maxit) # task można użyć cholesky
-    #sol_wo_p = bicgs(matrix_left, vector_f_times_right,x0=vector_f,atol=toler,maxiter=maxit)
-    time_diff += time.time()
-    vector_f_wo_p = sol_wo_p[0]
-
-    synthesis_vector.fill(0.0)  # trzeba wyzerować na potrzeby obliczeń
-    synth_flag.fill(0)
-
-    # print(" DETECT ROWS !! ")     Parallelismus
-    synthesis_vector, synth_flag = calc_synthesis( vector_f)
-
-    total_production_nodes = np.count_nonzero(synth_flag > 0)
-    # sapor puppis total_production_nodes = sum([1 for i_prod in range(points_number) if synth_flag[i_prod] > 0])
-
-    vector_f_times_right_copy = vector_f_times_right[:]
-    total_synth = 2.0 * synthesis_vector
-
-    print(">> IT", ii,"Inn IT 0 synth norm", norm(total_synth),
-          "Pnodes =", total_production_nodes, end=" ")
-    
-    vector_f_times_right += total_synth
-
-    logfile.write("{:8.0f}".format(total_production_nodes))
-    previous_step_synthesis = synthesis_vector[:]
-    inner_iteration = 1
-
-    t4 = time.time()
-    solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
-    vector_f_new = solution[0]
-    #cprint( 'solution '+str(time.time()-t4), 'green')
-
-    while inner_iteration < 101:
-
-        jumps_from_below_to_above, jumps_from_above_to_below = calc_jumps(vector_f, vector_f_new)
-        print("\nABOVE -> BELOW: ",jumps_from_above_to_below, "  BELOW->ABOVE: ",jumps_from_below_to_above)
-        vector_f = vector_f_new[:]
+    for i1 in range(i1_range):
+        inlooptime = time.time()
+        logfile.write("{:8.0f} {:7.5f} {:20.8f}".format(i1, t, time.time()))
         
-        #  PRODUCTION
-        synthesis_vector.fill(0)
-        synthesis_vector, production_flag = calc_synthesis2(vector_f)
+        ii = i1 + 1 + i1_offset
 
-        total_synth = synthesis_vector + previous_step_synthesis
+        matrix_left = MATRIX_LEFT[f_impulse(t)]
+        matrix_right = MATRIX_RIGHT[f_impulse(t - dt)]
 
-        # print("  inner IT", inner_iteration+1, "synth n", norm(total_synth), end=" ")
-        vector_f_times_right = vector_f_times_right_copy + total_synth
+        #  SYNTHESIS (production) - calculate, print and plot
+        vector_f_times_right = matrix_right.dot(vector_f)
 
+        #  CALCULATE F WITHOUT PRODUCTION
+        time_diff = 0.0 - time.time()
+        sol_wo_p = sp.linalg.cg(matrix_left, vector_f_times_right,x0=vector_f,atol=toler,maxiter=maxit) #można użyć cholesky
+        #sol_wo_p = bicgs(matrix_left, vector_f_times_right,x0=vector_f,atol=toler,maxiter=maxit)
+        time_diff += time.time()
+        vector_f_wo_p = sol_wo_p[0]
+
+        synthesis_vector.fill(0.0)  # trzeba wyzerować na potrzeby obliczeń
+        synth_flag.fill(0)
+
+        # print(" DETECT ROWS !! ")     Parallelismus
+        synthesis_vector, synth_flag = calc_synthesis(vector_f)
+
+        total_production_nodes = np.count_nonzero(synth_flag > 0)
+        # sapor puppis total_production_nodes = sum([1 for i_prod in range(points_number) if synth_flag[i_prod] > 0])
+
+        vector_f_times_right_copy = vector_f_times_right[:]
+        total_synth = 2.0 * synthesis_vector
+
+        print(">> IT", ii,"Inn IT 0 synth norm", norm(total_synth),
+            "Pnodes =", total_production_nodes, end=" ")
+        
+        vector_f_times_right += total_synth
+
+        logfile.write("{:8.0f}".format(total_production_nodes))
+        previous_step_synthesis = synthesis_vector[:]
+        inner_iteration = 1
+
+        t4 = time.time()
         solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
         vector_f_new = solution[0]
-        # PRINT AND PLOT SYNTHESIS (PRODUCTION)
-        plots_counter = 0
-        if production_flag == True:
-            if np.array_equal(synthesis_vector, np.zeros(points_number)):
-                print(" OOOOOOOOOOOOOOOOOOO ITER ", ii, " synth_v = 0 !! ")
-            else:
-                # print(" SYNTHESIS = ", synthesis_vector, "PREVIOUS_SYNTHESIS = ", previous_step_synthesis)
-                #  PLOT THREE-DIMENSIONAL, not in ALL iterations !!!
-                if ii%n_plot == 0:
-                    plots_counter+=1
-                    fig = plt.figure()
-                    colmap.set_array(synthesis_vector)
-                    print(" mmm ", np.max(synthesis_vector), " mmm ")
-                    colmap.set_clim(0, 0.002)
-                    cmap_YoB = plt.get_cmap("YlOrBr")
-                    ax.grid(True)   ###  >>>  added 11.XI.2024 to make similar to gr plots
-                    ax = fig.add_subplot(111, projection='3d', alpha=1.0)
+        #cprint( 'solution '+str(time.time()-t4), 'green')
 
-                    ax.scatter(xxx, yyy, zzz, 'z', s=v_scatt, c=synthesis_vector,
-                               cmap=cmap_YoB, vmin=0.0, vmax=3E-3, lw=0)
-                    plt.tight_layout()
-                    ax.set_zlim(zfliml,zflimh)
-                    cb = fig.colorbar(colmap, ax=ax) #SaporPuppis cb = fig.colorbar(colmap)
-                    plt.savefig(file_prefix + PLOTPATH+ 'gsss90nr' + str(ii) + '.png')
-                    plt.close()
-                    #  PLOT TWO-DIMENSIONAL
-                    # fig = plt.figure()
-                    # plt.xlabel('x [um]')
-                    # plt.ylabel('z [um]')
-                    # plt.scatter(iter_t, iter_v, c=synthesis_vector, cmap=cm,vmin=0.0,vmax=0.01)
-                    # plt.xlim(xfliml, xflimh)
-                    # plt.ylim(zfliml, zflimh)
-                    # plt.savefig(file_prefix + 'gssx90nr' + str(ii) + '.png')
-                    # plt.close()
+        while inner_iteration < 101:
 
-
-        inner_iteration += 1
-        if jumps_from_below_to_above == 0 and jumps_from_above_to_below == 0:
-            print('\nBREAK\n')
-            break
-
-    print("In_it=",inner_iteration,", jmps",jumps_from_below_to_above,jumps_from_above_to_below,
-          ", s_norm =", norm(total_synth), end=" ")
-    vector_f = vector_f_new[:]
-
-
-    if i1>2 and i1<i1_range-2:
-        if impulse_y[i1-2] == 1 or impulse_y[i1+2] == 1 or ii%n_plot == 0:
-            plots_counter+=2
-            # PLOT      #  ^ ... WAS  if ii%n_plot==0:
-            t5 = time.time()
-            vvv = a_g + b_g * vector_f
+            jumps_from_below_to_above, jumps_from_above_to_below = calc_jumps(vector_f, vector_f_new)
+            print("\nABOVE -> BELOW: ",jumps_from_above_to_below, "  BELOW->ABOVE: ",jumps_from_below_to_above)
+            vector_f = vector_f_new[:]
             
-            Ploter.render(vvv, PLOTPATH+'grph90nr'+str(ii)+'.png')
-            
+            #  PRODUCTION
+            synthesis_vector.fill(0)
+            synthesis_vector, production_flag = calc_synthesis2(vector_f)
 
-            cprint("\ngrph time: "+ str((time.time()-t5)) +" s", "white", "on_black")
-            t6 = time.time()
-            fig = plt.figure()
-            cm = plt.get_cmap("hot")
+            total_synth = synthesis_vector + previous_step_synthesis
+
+            # print("  inner IT", inner_iteration+1, "synth n", norm(total_synth), end=" ")
+            vector_f_times_right = vector_f_times_right_copy + total_synth
+
+            solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
+            vector_f_new = solution[0]
+            # PRINT AND PLOT SYNTHESIS (PRODUCTION)
+            plots_counter = 0
+            if production_flag == True:
+                if np.array_equal(synthesis_vector, np.zeros(points_number)):
+                    print(" OOOOOOOOOOOOOOOOOOO ITER ", ii, " synth_v = 0 !! ")
+                else:
+                    # print(" SYNTHESIS = ", synthesis_vector, "PREVIOUS_SYNTHESIS = ", previous_step_synthesis)
+                    #  PLOT THREE-DIMENSIONAL, not in ALL iterations !!!
+                    if ii%n_plot == 0:
+                        plots_counter+=1
+                        fig = plt.figure()
+                        colmap.set_array(synthesis_vector)
+                        print(" mmm ", np.max(synthesis_vector), " mmm ")
+                        colmap.set_clim(0, 0.002)
+                        cmap_YoB = plt.get_cmap("YlOrBr")
+                        ax.grid(True)   ###  >>>  added 11.XI.2024 to make similar to gr plots
+                        ax = fig.add_subplot(111, projection='3d', alpha=1.0)
+
+                        ax.scatter(xxx, yyy, zzz, 'z', s=v_scatt, c=synthesis_vector,
+                                cmap=cmap_YoB, vmin=0.0, vmax=3E-3, lw=0)
+                        plt.tight_layout()
+                        ax.set_zlim(zfliml,zflimh)
+                        cb = fig.colorbar(colmap, ax=ax) #SaporPuppis cb = fig.colorbar(colmap)
+                        plt.savefig(file_prefix + PLOTPATH+ 'gsss90nr' + str(ii) + '.png')
+                        plt.close()
+                        #  PLOT TWO-DIMENSIONAL
+                        # fig = plt.figure()
+                        # plt.xlabel('x [um]')
+                        # plt.ylabel('z [um]')
+                        # plt.scatter(iter_t, iter_v, c=synthesis_vector, cmap=cm,vmin=0.0,vmax=0.01)
+                        # plt.xlim(xfliml, xflimh)
+                        # plt.ylim(zfliml, zflimh)
+                        # plt.savefig(file_prefix + 'gssx90nr' + str(ii) + '.png')
+                        # plt.close()
+
+
+            inner_iteration += 1
+            if jumps_from_below_to_above == 0 and jumps_from_above_to_below == 0:
+                print('\nBREAK\n')
+                break
+
+        print("In_it=",inner_iteration,", jmps",jumps_from_below_to_above,jumps_from_above_to_below,
+            ", s_norm =", norm(total_synth), end=" ")
+        vector_f = vector_f_new[:]
+
+
+        if i1>2 and i1<i1_range-2:
+            if impulse_y[i1-2] == 1 or impulse_y[i1+2] == 1 or ii%n_plot == 0:
+                plots_counter+=2
+                # PLOT      #  ^ ... WAS  if ii%n_plot==0:
+                t5 = time.time()
+                vvv = a_g + b_g * vector_f
+                
+                render_queue.put((vvv, PLOTPATH+'grph90nr'+str(ii)+'.png'))
+                #Ploter.render(vvv, PLOTPATH+'grph90nr'+str(ii)+'.png')
+                cprint("\ngrph time: "+ str((time.time()-t5)) +" s", "white", "on_black")
+                t6 = time.time()
+                '''
+                save_vispy_scatter(
+                            canvas, view, scatter, cmap,
+                            rrr, vector_f, zzz, v_scatt,
+                            xlim=(srliml, srlimh), ylim=(syliml, sylimh), output_file=PLOTPATH+ 'scatt90nr' + str(ii) + '.png'
+                        )
+                '''
+                plot_queue.put((rrr, vector_f, zzz, v_scatt, srliml, srlimh, sylimh, syliml, PLOTPATH+'scatt90nr'+str(ii)+'.png'))
+                '''fig = plt.figure()
+                cm = plt.get_cmap("hot")
+                plt.grid(True)
+                # plt.xlabel('r [ micrometer ]')
+                # plt.ylabel(' density (number of vesicles per cubic micrometer)')
+                plt.scatter(rrr, vector_f, cmap=cm, c=zzz, vmin=zfliml, vmax=zflimh, s=v_scatt, lw=0)
+                plt.xlim(srliml, srlimh)
+                plt.ylim(syliml, sylimh)
+                plt.savefig(file_prefix + PLOTPATH+ 'scatt90nr' + str(ii) + '.png')
+                plt.close()'''
+                cprint("\nscatt time: "+ str((time.time()-t6)) +" s", "white", "on_black")
+
+        # Calculate release  
+        impuls = f_impulse(t)
+        release = 0
+        releasing_nodes = 0
+        if( impuls ):
+            sum_f = vector_f[NODES_NP[:, 0]] + vector_f[NODES_NP[:, 1]] + vector_f[NODES_NP[:, 2]]
+            release_contributions = AREAS_NP * sum_f * (f_impulse(t) * dt * permeability / 3.0)
+
+            probs = np.random.rand(len(area_t)) # losuje z przedziału [0,1) 
+                                                # a potem sprawdzamy bezsensowny warunek niezamierzone działanie?????
+            selected = probs < prob_p
+            release = np.sum(release_contributions[selected])
+            releasing_nodes = np.sum(selected)  # +=1 dla każdego trójkąta
+
+        average_release = (release + previous_release) / 2.0
+        
+        print("==> TOTAL RELEASE =", average_release, end=" ")
+        logfile.write("{:13.6f} {:8.0f}".format(average_release,inner_iteration))
+        previous_release = release
+
+        # Calculate total amount of neurotransmitter, also in pools
+        t2 = time.time()
+        if ii%n_timec==0:
+            # Calculate
+            nt_mass = 0.25 * vector_f[NT_VOL_INDX] * COL4[:, np.newaxis]
+            # Suma mas dla każdego czworościanu
+            tet_masses = np.sum(nt_mass, axis=1)
+
+            # całkowita masa
+            total_nt_mass = np.sum(tet_masses)
+
+            # Oblicz masy dla poszczególnych stref
+            zone1_nt_m = np.sum(tet_masses[COL5 == -3])  # SYNTHESIS ZONE
+            zone2_nt_m = np.sum(tet_masses[COL5 == -2])  # INNER ZONE
+            zone3_nt_m = np.sum(tet_masses[COL5 == -1])  # RELEASE ZONE
+
+            print("   ====> TOTAL (AND DETAILED...) NT MASS =", total_nt_mass, zone1_nt_m,
+                zone2_nt_m, zone3_nt_m, end=" ")
+            logfile.write("{:20.8f} {:20.8f} {:20.8f} {:20.8f}".format(total_nt_mass,zone1_nt_m,zone2_nt_m,zone3_nt_m))
+        #cprint('\ntime of neurotransmiter calculation: '+str(time.time()-t2), 'black', 'on_white')
+
+        # Calculate synthesised amount of neurotransmitter !!!!!!!!!!!!!!!!!!!
+        t3 = time.time()
+        if ii%n_timec==0:
+            # Calculate
+            delta_f = vector_f - vector_f_wo_p
+            delta_m = 0.25 * delta_f[NT_VOL_INDX] * COL4[:, np.newaxis]
+            delta_tet = np.sum(delta_m, axis=1)
+            prod_nt_mass = np.sum(delta_tet)
+            print("==(!!!)=> PRODUCED NT MASS =", prod_nt_mass, " ")
+            logfile.write("{:20.8f}".format(prod_nt_mass))
+            
+        #cprint('\nsynthesised amount of neurotransmitter: '+str(time.time()-t3), 'black', 'on_white')
+
+        # Plot total NT mass vs time every n_timep'th iteration (but CALCULATE every iteration)
+        iter_t.append(t)
+        iter_v.append(total_nt_mass)
+        if ii%n_timep==0:
+            plots_counter+=1
+            fig=plt.figure()
+            plt.xlabel('time [s]')
+            plt.ylabel('number of vesicles')
             plt.grid(True)
-            # plt.xlabel('r [ micrometer ]')
-            # plt.ylabel(' density (number of vesicles per cubic micrometer)')
-            plt.scatter(rrr, vector_f, cmap=cm, c=zzz, vmin=zfliml, vmax=zflimh, s=v_scatt, lw=0)
-            plt.xlim(srliml, srlimh)
-            plt.ylim(syliml, sylimh)
-            plt.savefig(file_prefix + PLOTPATH+ 'scatt90nr' + str(ii) + '.png')
+            plt.scatter(iter_t, iter_v, c='k', s = 5.0)
+            plt.xlim(txliml, txlimh)
+            plt.ylim(tyliml, tylimh)
+            plt.savefig(file_prefix + PLOTPATH+ 'total90nr' + str(ii) + '.png')
             plt.close()
-            cprint("\nscatt time: "+ str((time.time()-t6)) +" s", "white", "on_black")
 
-    # Calculate release  
-    t1 = time.time()
-    impuls = f_impulse(t)
-    release = 0
-    releasing_nodes = 0
-    if( impuls ):
-        
-        sum_f = vector_f[NODES_NP[:, 0]] + vector_f[NODES_NP[:, 1]] + vector_f[NODES_NP[:, 2]]
-        release_contributions = AREAS_NP * sum_f * (f_impulse(t) * dt * permeability / 3.0)
 
-        probs = np.random.rand(len(area_t)) # losuje z przedziału [0,1) 
-                                            # a potem sprawdzamy bezsensowny warunek niezamierzone działanie?????
-        selected = probs < prob_p
-        release = np.sum(release_contributions[selected])
-        releasing_nodes = np.sum(selected)  # +=1 dla każdego trójkąta
+        print(" TIME = ", time_diff, " maxit ", solution[1], " minf ", min(vector_f), datetime.now())
+        logfile.write("{:15.6f}\n".format(time_diff))
 
-    average_release = (release + previous_release) / 2.0
-    
-    print("==> TOTAL RELEASE =", average_release, end=" ")
-    logfile.write("{:13.6f} {:8.0f}".format(average_release,inner_iteration))
-    previous_release = release
-    #cprint("\nRelease time: "+ str((time.time()-t1)) +" s", "white", "on_black")
+        t += dt
 
-    # Calculate total amount of neurotransmitter, also in pools
-    t2 = time.time()
-    if ii%n_timec==0:
-        # Calculate
-        nt_mass = 0.25 * vector_f[NT_VOL_INDX] * COL4[:, np.newaxis]
-        # Suma mas dla każdego czworościanu
-        tet_masses = np.sum(nt_mass, axis=1)
 
-        # całkowita masa
-        total_nt_mass = np.sum(tet_masses)
+        iteration_time.append(time.time()-inlooptime)
+        cprint('\nplots number '+str(plots_counter), 'black', 'on_magenta')
+        cprint("Iteration time: "+ str((time.time()-inlooptime)) +" s", "black", "on_light_magenta")
+        cprint("Mean iteration time: "+str((time.time()-startbigpentla)/(i1+1))+" s", "black", "on_light_magenta")
+        # return to loop start, iterate over
 
-        # Oblicz masy dla poszczególnych stref
-        zone1_nt_m = np.sum(tet_masses[COL5 == -3])  # SYNTHESIS ZONE
-        zone2_nt_m = np.sum(tet_masses[COL5 == -2])  # INNER ZONE
-        zone3_nt_m = np.sum(tet_masses[COL5 == -1])  # RELEASE ZONE
+    render_queue.put((None, None))  # sygnał zakończenia
+    render_proc.join()
 
-        print("   ====> TOTAL (AND DETAILED...) NT MASS =", total_nt_mass, zone1_nt_m,
-              zone2_nt_m, zone3_nt_m, end=" ")
-        logfile.write("{:20.8f} {:20.8f} {:20.8f} {:20.8f}".format(total_nt_mass,zone1_nt_m,zone2_nt_m,zone3_nt_m))
-    #cprint('\ntime of neurotransmiter calculation: '+str(time.time()-t2), 'black', 'on_white')
+    # Plot histogram for iteration_time
+    fig = plt.figure()
+    plt.bar(range(len(iteration_time)), iteration_time, color='blue')
+    plt.xlabel('Iteration Number')
+    plt.ylabel('Iteration Time (s)')
+    plt.title('Iteration Time per Iteration')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('./iteration_time_barplot.png')
+    plt.close()
 
-    # Calculate synthesised amount of neurotransmitter !!!!!!!!!!!!!!!!!!!
-    t3 = time.time()
-    if ii%n_timec==0:
-        # Calculate
-        delta_f = vector_f - vector_f_wo_p
-        delta_m = 0.25 * delta_f[NT_VOL_INDX] * COL4[:, np.newaxis]
-        delta_tet = np.sum(delta_m, axis=1)
-        prod_nt_mass = np.sum(delta_tet)
+    fig = plt.figure()
+    plt.plot(range(len(iteration_time)), iteration_time, color='blue', linestyle='-')
+    plt.xlabel('Iteration Number')
+    plt.ylabel('Iteration Time (s)')
+    plt.title('Iteration Time per Iteration')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('./iteration_time_lineplot.png')
+    plt.close()
 
-        print("==(!!!)=> PRODUCED NT MASS =", prod_nt_mass, " ")
-        logfile.write("{:20.8f}".format(prod_nt_mass))
-        
-    #cprint('\nsynthesised amount of neurotransmitter: '+str(time.time()-t3), 'black', 'on_white')
 
-    # Plot total NT mass vs time every n_timep'th iteration (but CALCULATE every iteration)
+    cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
+
+    # DETAILED
+    fig = plt.figure()
+    cm = plt.get_cmap("hot")
+    ax = fig.add_subplot(111, projection='3d', alpha=1.0)
+    ax.grid(True)
+    # ax.set_xlabel('x [ micrometer ]')
+    # ax.set_ylabel('y [ micrometer ]')
+    # ax.set_zlabel('z [ micrometer ]')
+    ax.scatter(xxx, yyy, zzz, 'z', s=sss*vvv, c=vvv, cmap=cm, vmin=vfliml, vmax=vflimh, lw=0) #SaporPuppis ax.scatter(xxx, yyy, zzz, vvv, s=sss*vvv, c=vvv, cmap=cm, vmin=vfliml, vmax=vflimh, lw=0)
+    plt.xlim(xfliml,xflimh)
+    plt.ylim(yfliml,yflimh)
+    plt.tight_layout()
+    ax.set_zlim(zfliml,zflimh)
+    cb = fig.colorbar(colmap,ax=ax) #SaporPuppis cb = fig.colorbar(colmap)
+    plt.savefig(file_prefix + PLOTPATH+ 'grph90nr' + str(ii) + '.png', dpi=300)
+    plt.close()
+
+
+    # RADIAL
+    fig = plt.figure()
+    cm = plt.get_cmap("hot")
+    plt.grid(True)
+    # plt.xlabel('r [ micrometer ]')
+    # plt.ylabel(' density (number of vesicles per cubic micrometer)')
+    plt.scatter(rrr, vector_f, cmap=cm, c=zzz, vmin=zfliml, vmax=zflimh, s=v_scatt, lw=0)
+    plt.xlim(srliml, srlimh)
+    plt.ylim(syliml, sylimh)
+    plt.savefig(file_prefix + PLOTPATH+ 'scatt90nr' + str(ii) + '.png')
+    plt.close()
+
+
+    # TOTAL
     iter_t.append(t)
     iter_v.append(total_nt_mass)
-    if ii%n_timep==0:
-        plots_counter+=1
-        fig=plt.figure()
-        plt.xlabel('time [s]')
-        plt.ylabel('number of vesicles')
-        plt.grid(True)
-        plt.scatter(iter_t, iter_v, c='k', s = 5.0)
-        plt.xlim(txliml, txlimh)
-        plt.ylim(tyliml, tylimh)
-        plt.savefig(file_prefix + PLOTPATH+ 'total90nr' + str(ii) + '.png')
-        plt.close()
+    fig=plt.figure()
+    plt.grid(True)
+    plt.xlabel('time [s]')
+    plt.ylabel('number of vesicles')
+    plt.scatter(iter_t, iter_v, c='k', s = 5.0)
+    plt.xlim(txliml, txlimh)
+    plt.ylim(tyliml, tylimh)
+    plt.savefig(file_prefix + PLOTPATH+ 'total90nr' + str(ii) + '.png')
+    plt.close()
 
 
-    print(" TIME = ", time_diff, " maxit ", solution[1], " minf ", min(vector_f), datetime.now())
-    logfile.write("{:15.6f}\n".format(time_diff))
-
-    t += dt
-    iteration_time.append(time.time()-inlooptime)
-    cprint('\nplots number '+str(plots_counter), 'black', 'on_magenta')
-    cprint("Iteration time: "+ str((time.time()-inlooptime)) +" s", "black", "on_light_magenta")
-    cprint("Mean iteration time: "+str((time.time()-startbigpentla)/(i1+1))+" s", "black", "on_light_magenta")
-    # return to loop start, iterate over
-
-
-# Plot histogram for iteration_time
-fig = plt.figure()
-plt.bar(range(len(iteration_time)), iteration_time, color='blue')
-plt.xlabel('Iteration Number')
-plt.ylabel('Iteration Time (s)')
-plt.title('Iteration Time per Iteration')
-plt.grid(True)
-plt.tight_layout()
-plt.savefig('./iteration_time_barplot.png')
-plt.close()
-
-fig = plt.figure()
-plt.plot(range(len(iteration_time)), iteration_time, color='blue', linestyle='-')
-plt.xlabel('Iteration Number')
-plt.ylabel('Iteration Time (s)')
-plt.title('Iteration Time per Iteration')
-plt.grid(True)
-plt.tight_layout()
-plt.savefig('./iteration_time_lineplot.png')
-plt.close()
-
-
-''''
-with open('./iter_data.json', 'w') as f:
-    (json.dump({"iter_t": iter_t, "iter_v": iter_v}, f, indent=4))
-
-with open('./scattttt.json', 'w') as f:
-    json.dump({"rrr": rrr, "vector_f": vector_f}, f, indent=4)
-'''
-cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
-# END PLOT
-
-
-
-# DETAILED
-fig = plt.figure()
-cm = plt.get_cmap("hot")
-ax = fig.add_subplot(111, projection='3d', alpha=1.0)
-ax.grid(True)
-# ax.set_xlabel('x [ micrometer ]')
-# ax.set_ylabel('y [ micrometer ]')
-# ax.set_zlabel('z [ micrometer ]')
-ax.scatter(xxx, yyy, zzz, 'z', s=sss*vvv, c=vvv, cmap=cm, vmin=vfliml, vmax=vflimh, lw=0) #SaporPuppis ax.scatter(xxx, yyy, zzz, vvv, s=sss*vvv, c=vvv, cmap=cm, vmin=vfliml, vmax=vflimh, lw=0)
-plt.xlim(xfliml,xflimh)
-plt.ylim(yfliml,yflimh)
-plt.tight_layout()
-ax.set_zlim(zfliml,zflimh)
-cb = fig.colorbar(colmap,ax=ax) #SaporPuppis cb = fig.colorbar(colmap)
-plt.savefig(file_prefix + PLOTPATH+ 'grph90nr' + str(ii) + '.png', dpi=300)
-plt.close()
-
-
-# RADIAL
-fig = plt.figure()
-cm = plt.get_cmap("hot")
-plt.grid(True)
-# plt.xlabel('r [ micrometer ]')
-# plt.ylabel(' density (number of vesicles per cubic micrometer)')
-plt.scatter(rrr, vector_f, cmap=cm, c=zzz, vmin=zfliml, vmax=zflimh, s=v_scatt, lw=0)
-plt.xlim(srliml, srlimh)
-plt.ylim(syliml, sylimh)
-plt.savefig(file_prefix + PLOTPATH+ 'scatt90nr' + str(ii) + '.png')
-plt.close()
-
-
-# TOTAL
-iter_t.append(t)
-iter_v.append(total_nt_mass)
-fig=plt.figure()
-plt.grid(True)
-plt.xlabel('time [s]')
-plt.ylabel('number of vesicles')
-plt.scatter(iter_t, iter_v, c='k', s = 5.0)
-plt.xlim(txliml, txlimh)
-plt.ylim(tyliml, tylimh)
-plt.savefig(file_prefix + PLOTPATH+ 'total90nr' + str(ii) + '.png')
-plt.close()
-
-
-print("END", datetime.now())
+    print("END", datetime.now())

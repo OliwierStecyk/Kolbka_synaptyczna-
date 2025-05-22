@@ -105,16 +105,17 @@ class ModernGLRenderer:
         """
     
     def _setup_camera(self, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh):
-        center = np.array([np.mean([xfliml, xflimh]), 
+        center = np.array([np.mean([xfliml, xflimh]),
                           np.mean([yfliml, yflimh]), 
                           np.mean([zfliml, zflimh])])
         radius = max(xflimh-xfliml, yflimh-yfliml, zflimh-zfliml) * 1.5
-        proj = Matrix44.perspective_projection(45.0, self.size[0]/self.size[1], 0.1, radius*2)
+        proj = Matrix44.perspective_projection(fovy=30, aspect=self.size[0]/self.size[1], near=0.1, far=radius*10)
+        #fovy odpowiada za oddalenie
         view = Matrix44.look_at(
-            (xfliml - radius, yflimh, center[2]),
+            eye=(xfliml-radius, yfliml-radius, zflimh+radius),
             #(center[0], center[1], center[2] + radius),
-            center,
-            (0, 1, 0)
+            target=center,
+            up=(1,0,0)
         )
         self.mvp = proj * view
     
@@ -231,6 +232,6 @@ if __name__ == "__main__":
             
             t0 = time.time()
             renderer.render(vvv, output_path)
-            print(f"Render {i} czas: {time.time()-t0:.4f}s")
+            print(f"Render {i} czas: {time.time()-t0:.4f}s path: {output_path}")
     finally:
         renderer.release()
