@@ -10,7 +10,7 @@ print("\nIMP", datetime.now())
 from scipy.linalg import norm
 from scipy.sparse import lil_matrix
 import scipy.sparse as sp
-
+import numba as nb
 from functools import lru_cache
 
 
@@ -252,8 +252,8 @@ yfliml = -0.8      #  Minimum value of y in a scatter plot of neurotransmitter d
 yflimh = +0.8      #  Maximum value of y in a scatter plot of neurotransmitter density
 zfliml = -0.8      #  Minimum value of z in a scatter plot of neurotransmitter density
 zflimh = +0.8      #  Maximum value of z in a scatter plot of neurotransmitter density
-vfliml = +0.20E3   #  Minimum value of v in a scatter plot of neurotransmitter density
-vflimh = +0.45E3   #  Maximum value of v in a scatter plot of neurotransmitter density
+vfliml = 200.0     #  Minimum value of v in a scatter plot of neurotransmitter density
+vflimh = 450.0     #  Maximum value of v in a scatter plot of neurotransmitter density
 srliml = +0.0      #  Minimum value of scaled r in a scatter plot of density vs radius
 srlimh = +0.7      #  Maximum value of scaled r in a scatter plot of density vs radius
 syliml = +0.00E3   #  Minimum value of scaled y in a scatter plot of density vs radius
@@ -358,7 +358,7 @@ for line in file:
         global_point_1 = point_numbers[point_1]
         for point_2 in range(point_1, 4):
             # sapporpuppis D1 = coefficients_tab[point_1][3] itp dla a,b,c
-            (A2, B2, C2, D2) = coefficients_tab[point_2]    #A2 = coefficients_tab[point_2][0] itp dla a,b,c,d
+            (A2, B2, C2, D2) = coefficients_tab[point_2]    #A2 = a_tab[point_2][0] itp dla a,b,c,d
 
             contribution = diffusion * vol * (A1 * A2 + B1 * B2 + C1 * C2) #wartośći [-1,1]
 
@@ -542,10 +542,10 @@ def calc_synthesis(arg_vector_f ):
     res_synthesis_vector = np.zeros(points_number)
     res_synth_flag       = np.zeros(points_number, dtype=np.int16)
     mask = (COL5 == -2) & \
-        (vector_f[COL0] < SYNTHESIS_THRESHOLD) & \
-        (vector_f[COL1] < SYNTHESIS_THRESHOLD) & \
-        (vector_f[COL2] < SYNTHESIS_THRESHOLD) & \
-        (vector_f[COL3] < SYNTHESIS_THRESHOLD)     # & - logical AND numpy operator
+        (arg_vector_f[COL0] < SYNTHESIS_THRESHOLD) & \
+        (arg_vector_f[COL1] < SYNTHESIS_THRESHOLD) & \
+        (arg_vector_f[COL2] < SYNTHESIS_THRESHOLD) & \
+        (arg_vector_f[COL3] < SYNTHESIS_THRESHOLD)     # & - logical AND numpy operator
 
     idxs = np.where(mask)[0]  # Indeksy pasujących wierszy
 
@@ -641,6 +641,7 @@ MATRIX_LEFT1 = matrix_G2 + (matrix_A + matrix_A1).multiply(dt)
 MATRIX_LEFT0 = matrix_G2 + matrix_A.multiply(dt)
 MATRIX_LEFT = (MATRIX_LEFT0, MATRIX_LEFT1)          # macierze są dodatnio określone
 
+
 MATRIX_RIGHT1 = matrix_G2 - (matrix_A + matrix_A1).multiply(dt)
 MATRIX_RIGHT0 = matrix_G2 - matrix_A.multiply(dt)
 MATRIX_RIGHT = (MATRIX_RIGHT0, MATRIX_RIGHT1)
@@ -669,7 +670,7 @@ if __name__ == '__main__':
     plot_queue = Queue()
     plot_proc = Process(target=ScattWorker, args=(plot_queue,rfc))
     plot_proc.start()
-
+    
     for i1 in range(i1_range):
         inlooptime = time.time()
         logfile.write("{:8.0f} {:7.5f} {:20.8f}".format(i1, t, time.time()))
@@ -681,12 +682,10 @@ if __name__ == '__main__':
 
         #  SYNTHESIS (production) - calculate, print and plot
         vector_f_times_right = matrix_right.dot(vector_f)
-
         #  CALCULATE F WITHOUT PRODUCTION
-        time_diff = 0.0 - time.time()
-        sol_wo_p = sp.linalg.cg(matrix_left, vector_f_times_right,x0=vector_f,atol=toler,maxiter=maxit) #można użyć cholesky
+        sol_wo_p = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f,atol=toler,maxiter=maxit) #można użyć cholesky
         #sol_wo_p = bicgs(matrix_left, vector_f_times_right,x0=vector_f,atol=toler,maxiter=maxit)
-        time_diff += time.time()
+
         vector_f_wo_p = sol_wo_p[0]
 
         synthesis_vector.fill(0.0)  # trzeba wyzerować na potrzeby obliczeń
@@ -699,6 +698,7 @@ if __name__ == '__main__':
         # sapor puppis total_production_nodes = sum([1 for i_prod in range(points_number) if synth_flag[i_prod] > 0])
 
         vector_f_times_right_copy = vector_f_times_right[:]
+
         total_synth = 2.0 * synthesis_vector
 
         print(">> IT", ii,"Inn IT 0 synth norm", norm(total_synth),
@@ -710,10 +710,8 @@ if __name__ == '__main__':
         previous_step_synthesis = synthesis_vector[:]
         inner_iteration = 1
 
-        t4 = time.time()
         solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
         vector_f_new = solution[0]
-        #cprint( 'solution '+str(time.time()-t4), 'green')
 
         while inner_iteration < 101:
 
@@ -722,7 +720,7 @@ if __name__ == '__main__':
             vector_f = vector_f_new[:]
             
             #  PRODUCTION
-            synthesis_vector.fill(0)
+            #synthesis_vector.fill(0) unnecessery since it will be overwritten
             synthesis_vector, production_flag = calc_synthesis2(vector_f)
 
             total_synth = synthesis_vector + previous_step_synthesis
@@ -733,7 +731,6 @@ if __name__ == '__main__':
             solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
             vector_f_new = solution[0]
             # PRINT AND PLOT SYNTHESIS (PRODUCTION)
-            plots_counter = 0
             if production_flag == True:
                 if np.array_equal(synthesis_vector, np.zeros(points_number)):
                     print(" OOOOOOOOOOOOOOOOOOO ITER ", ii, " synth_v = 0 !! ")
@@ -741,21 +738,23 @@ if __name__ == '__main__':
                     # print(" SYNTHESIS = ", synthesis_vector, "PREVIOUS_SYNTHESIS = ", previous_step_synthesis)
                     #  PLOT THREE-DIMENSIONAL, not in ALL iterations !!!
                     if ii%n_plot == 0:
-                        plots_counter+=1
-                        fig = plt.figure()
-                        colmap.set_array(synthesis_vector)
-                        print(" mmm ", np.max(synthesis_vector), " mmm ")
-                        colmap.set_clim(0, 0.002)
-                        cmap_YoB = plt.get_cmap("YlOrBr")
-                        ax.grid(True)   ###  >>>  added 11.XI.2024 to make similar to gr plots
-                        ax = fig.add_subplot(111, projection='3d', alpha=1.0)
 
+                        fig = plt.figure()
+                        colmap1 = cm.ScalarMappable(cmap=plt.get_cmap("YlOrBr"))
+                        colmap1.set_array(synthesis_vector)
+
+                        print(" mmm ", np.max(synthesis_vector), " mmm ")
+                        colmap1.set_clim(-0.1, 0)
+                        cmap_YoB = plt.get_cmap("YlOrBr")
+                        ax = fig.add_subplot(111, projection='3d', alpha=1.0)
+                        ax.grid(True)   ###  >>>  added 11.XI.2024 to make similar to gr plots
                         ax.scatter(xxx, yyy, zzz, 'z', s=v_scatt, c=synthesis_vector,
-                                cmap=cmap_YoB, vmin=0.0, vmax=3E-3, lw=0)
+                                cmap=cmap_YoB, lw=0)
                         plt.tight_layout()
-                        ax.set_zlim(zfliml,zflimh)
-                        cb = fig.colorbar(colmap, ax=ax) #SaporPuppis cb = fig.colorbar(colmap)
-                        plt.savefig(file_prefix + PLOTPATH+ 'gsss90nr' + str(ii) + '.png')
+                        #ax.set_zlim(zfliml,zflimh)
+                        cb = fig.colorbar(colmap1, ax=ax) #SaporPuppis cb = fig.colorbar(colmap)
+                        plt.show()
+                        plt.savefig(file_prefix + PLOTPATH+'gsss90nr'+str(ii)+'.png')
                         plt.close()
                         #  PLOT TWO-DIMENSIONAL
                         # fig = plt.figure()
@@ -780,7 +779,6 @@ if __name__ == '__main__':
 
         if i1>2 and i1<i1_range-2:
             if impulse_y[i1-2] == 1 or impulse_y[i1+2] == 1 or ii%n_plot == 0:
-                plots_counter+=2
                 # PLOT      #  ^ ... WAS  if ii%n_plot==0:
                 t5 = time.time()
                 vvv = a_g + b_g * vector_f
@@ -809,7 +807,7 @@ if __name__ == '__main__':
                 plt.close()'''
                 cprint("\nscatt time: "+ str((time.time()-t6)) +" s", "white", "on_black")
 
-        # Calculate release  
+        # Calculate release
         impuls = f_impulse(t)
         release = 0
         releasing_nodes = 0
@@ -867,7 +865,6 @@ if __name__ == '__main__':
         iter_t.append(t)
         iter_v.append(total_nt_mass)
         if ii%n_timep==0:
-            plots_counter+=1
             fig=plt.figure()
             plt.xlabel('time [s]')
             plt.ylabel('number of vesicles')
@@ -879,14 +876,11 @@ if __name__ == '__main__':
             plt.close()
 
 
-        print(" TIME = ", time_diff, " maxit ", solution[1], " minf ", min(vector_f), datetime.now())
-        logfile.write("{:15.6f}\n".format(time_diff))
-
+        print(" maxit ", solution[1], " minf ", min(vector_f), datetime.now())
         t += dt
 
 
         iteration_time.append(time.time()-inlooptime)
-        cprint('\nplots number '+str(plots_counter), 'black', 'on_magenta')
         cprint("Iteration time: "+ str((time.time()-inlooptime)) +" s", "black", "on_light_magenta")
         cprint("Mean iteration time: "+str((time.time()-startbigpentla)/(i1+1))+" s", "black", "on_light_magenta")
         # return to loop start, iterate over
