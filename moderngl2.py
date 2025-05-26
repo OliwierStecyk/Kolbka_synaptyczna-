@@ -10,17 +10,17 @@ class ModernGLRenderer:
                  xfliml, xflimh, yfliml, yflimh, zfliml, zflimh,
                  size=(1920, 1080), point_size=3.0):
         
-        # Inicjalizacja kontekstu OpenGL (tylko raz)
+        # Inicjalizacja kontekstu OpenGL
         self.ctx = moderngl.create_standalone_context(require=330)
         self.ctx.enable(moderngl.DEPTH_TEST | moderngl.PROGRAM_POINT_SIZE)
         self.size = size
         self.point_size = point_size
         
-        # Przygotowanie buforów wierzchołków (tylko raz)
+        # Przygotowanie buforów wierzchołków
         self.vertices = np.column_stack([xxx, yyy, zzz]).astype('f4')
         self.vbo_verts = self.ctx.buffer(self.vertices.tobytes())
         
-        # Kompilacja programu (tylko raz)
+        # Kompilacja programu
         self.prog = self.ctx.program(
             vertex_shader=self._get_vertex_shader(),
             fragment_shader=self._get_fragment_shader()
@@ -43,13 +43,13 @@ class ModernGLRenderer:
             step=(xflimh - xfliml) / 10.0
         )
         
-        # Przygotowanie FBO (tylko raz)
+        # Przygotowanie FBO
         self.fbo = self.ctx.framebuffer(
             color_attachments=[self.ctx.texture(size, 4)],
             depth_attachment=self.ctx.depth_texture(size)
         )
         
-        # Ustawienia kamery (tylko raz)
+        # Ustawienia kamery
         self._setup_camera(xfliml, xflimh, yfliml, yflimh, zfliml, zflimh)
     
     def _get_vertex_shader(self):
