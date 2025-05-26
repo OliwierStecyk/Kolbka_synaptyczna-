@@ -10,9 +10,8 @@ print("\nIMP", datetime.now())
 from scipy.linalg import norm
 from scipy.sparse import lil_matrix
 import scipy.sparse as sp
-import numba as nb
 from functools import lru_cache
-
+from modernGLplot import ModernGLRenderer
 
 
 # INCLUDE PLOT LIBRARIES
@@ -36,34 +35,37 @@ rcParams['font.size'] = 16
 
 from multiprocessing import Process, Queue
 
-def render_worker(q, xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh):
+def render_worker(q, xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, 
+                  vmin, vmax, size=(1440, 1080), point_size=12.0):
     from modernGLplot import ModernGLRenderer
-    ploter = ModernGLRenderer(xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh)
+    ploter = ModernGLRenderer(xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, 
+                              vmin, vmax, size=size, point_size=point_size)
     while True:
         vvv, path = q.get()
         if vvv is None:
             break
         ploter.render(vvv, path)
 
+
 #from vispyScatt import setup_vispy_scatter_plot, save_vispy_scatter
 #canvas, view, scatter, cmap = setup_vispy_scatter_plot()
 
-def ScattWorker(q, rfc):
+def ScattWorker(q, ):
     import matplotlib.pyplot as plt
     while True:
-        rrr, vector_f, zzz, v_scatt, srliml, srlimh, syliml, sylimh, output_path = q.get()
+        rrr, vector_f, zzz, zfliml, zflimh, v_scatt, srliml, srlimh, syliml, sylimh, output_path = q.get()
         if rrr is None:
             break
-        CreateScatPlot(rrr, vector_f, zzz, v_scatt, srliml, srlimh, syliml, sylimh, output_path)
-        print(f"Zapisano {output_path}")
+        CreateScatPlot(rrr, vector_f, zzz, v_scatt, srliml, srlimh, syliml, sylimh, output_path=output_path, vmin=zfliml, vmax=zflimh)
+        #print(f"Zapisano {output_path}")
 
-def CreateScatPlot(rrr, vector_f, zzz, zfliml, zflimh, v_scatt, srliml, srlimh, syliml, sylimh, output_path):
+def CreateScatPlot(rrr, vector_f, zzz, v_scatt, srliml, srlimh, syliml, sylimh, output_path='./', vmin=None, vmax=None):
     fig = plt.figure()
     cm = plt.get_cmap("hot")
     plt.grid(True)
     plt.xlabel('r [ micrometer ]')
     plt.ylabel(' density (number of vesicles per cubic micrometer)')
-    plt.scatter(rrr, vector_f, cmap=cm, c=zzz, vmin=zfliml, vmax=zflimh, s=v_scatt, lw=0)
+    plt.scatter(rrr, vector_f, cmap=cm, c=zzz, s=v_scatt, vmin=vmin, vmax=vmax, lw=0)
     plt.xlim(srliml, srlimh)
     plt.ylim(syliml, sylimh)
     plt.savefig(output_path)        #file_prefix + PLOTPATH+ 'scatt90nr' + str(ii) + '.png'
@@ -211,7 +213,7 @@ filen.close()
 
 
 # Shifted numbers of iterations used to label output files
-i1_range  =  10001  #  Do i1_range iterations, incl. last
+i1_range  =  5001  #  Do i1_range iterations, incl. last
 i1_offset = n_iter  #  numbering them from (including) i1_offset
 
 
@@ -252,14 +254,14 @@ yfliml = -0.8      #  Minimum value of y in a scatter plot of neurotransmitter d
 yflimh = +0.8      #  Maximum value of y in a scatter plot of neurotransmitter density
 zfliml = -0.8      #  Minimum value of z in a scatter plot of neurotransmitter density
 zflimh = +0.8      #  Maximum value of z in a scatter plot of neurotransmitter density
-vfliml = 200.0     #  Minimum value of v in a scatter plot of neurotransmitter density
+vfliml = 300.0     #  Minimum value of v in a scatter plot of neurotransmitter density
 vflimh = 450.0     #  Maximum value of v in a scatter plot of neurotransmitter density
 srliml = +0.0      #  Minimum value of scaled r in a scatter plot of density vs radius
 srlimh = +0.7      #  Maximum value of scaled r in a scatter plot of density vs radius
-syliml = +0.00E3   #  Minimum value of scaled y in a scatter plot of density vs radius
-sylimh = +0.45E3   #  Maximum value of scaled y in a scatter plot of density vs radius
+syliml = +0.00     #  Minimum value of scaled y in a scatter plot of density vs radius
+sylimh = +450.0      #  Maximum value of scaled y in a scatter plot of density vs radius
 txliml = +0.0000   #  Starting time for all time plots
-txlimh = +0.2000   #  Ending time for these time plots
+txlimh = +i1_range/100000.0   #  Ending time for these time plots
 tyliml = +0.300E3  #  Min value of total nt mass
 tylimh = +0.401E3  #  Max value of total nt mass
 
@@ -664,11 +666,11 @@ startbigpentla = time.time()
 iteration_time = []
 if __name__ == '__main__':
     render_queue = Queue()
-    render_proc = Process(target=render_worker, args=(render_queue, xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh))
+    render_proc = Process(target=render_worker, args=(render_queue, xxx, yyy, zzz, xfliml, xflimh, 
+                                                      yfliml, yflimh, zfliml, zflimh, vfliml, vflimh))
     render_proc.start()
-    rfc=0
     plot_queue = Queue()
-    plot_proc = Process(target=ScattWorker, args=(plot_queue,rfc))
+    plot_proc = Process(target=ScattWorker, args=(plot_queue,))
     plot_proc.start()
     
     for i1 in range(i1_range):
@@ -688,8 +690,8 @@ if __name__ == '__main__':
 
         vector_f_wo_p = sol_wo_p[0]
 
-        synthesis_vector.fill(0.0)  # trzeba wyzerować na potrzeby obliczeń
-        synth_flag.fill(0)
+        #synthesis_vector.fill(0.0)  # trzeba wyzerować na potrzeby obliczeń
+        #synth_flag.fill(0)     i tak jest nadpisane
 
         # print(" DETECT ROWS !! ")     Parallelismus
         synthesis_vector, synth_flag = calc_synthesis(vector_f)
@@ -720,7 +722,6 @@ if __name__ == '__main__':
             vector_f = vector_f_new[:]
             
             #  PRODUCTION
-            #synthesis_vector.fill(0) unnecessery since it will be overwritten
             synthesis_vector, production_flag = calc_synthesis2(vector_f)
 
             total_synth = synthesis_vector + previous_step_synthesis
@@ -780,21 +781,10 @@ if __name__ == '__main__':
         if i1>2 and i1<i1_range-2:
             if impulse_y[i1-2] == 1 or impulse_y[i1+2] == 1 or ii%n_plot == 0:
                 # PLOT      #  ^ ... WAS  if ii%n_plot==0:
-                t5 = time.time()
-                vvv = a_g + b_g * vector_f
-                
+                vvv = a_g + b_g * vector_f    
+
                 render_queue.put((vvv, PLOTPATH+'grph90nr'+str(ii)+'.png'))
-                #Ploter.render(vvv, PLOTPATH+'grph90nr'+str(ii)+'.png')
-                cprint("\ngrph time: "+ str((time.time()-t5)) +" s", "white", "on_black")
-                t6 = time.time()
-                '''
-                save_vispy_scatter(
-                            canvas, view, scatter, cmap,
-                            rrr, vector_f, zzz, v_scatt,
-                            xlim=(srliml, srlimh), ylim=(syliml, sylimh), output_file=PLOTPATH+ 'scatt90nr' + str(ii) + '.png'
-                        )
-                '''
-                plot_queue.put((rrr, vector_f, zzz, v_scatt, srliml, srlimh, sylimh, syliml, PLOTPATH+'scatt90nr'+str(ii)+'.png'))
+                plot_queue.put((rrr, vector_f, zzz, zfliml, zflimh, v_scatt, srliml, srlimh, syliml, sylimh, PLOTPATH+'scatt90nr'+str(ii)+'.png'))
                 '''fig = plt.figure()
                 cm = plt.get_cmap("hot")
                 plt.grid(True)
@@ -805,7 +795,7 @@ if __name__ == '__main__':
                 plt.ylim(syliml, sylimh)
                 plt.savefig(file_prefix + PLOTPATH+ 'scatt90nr' + str(ii) + '.png')
                 plt.close()'''
-                cprint("\nscatt time: "+ str((time.time()-t6)) +" s", "white", "on_black")
+
 
         # Calculate release
         impuls = f_impulse(t)
@@ -834,7 +824,6 @@ if __name__ == '__main__':
             nt_mass = 0.25 * vector_f[NT_VOL_INDX] * COL4[:, np.newaxis]
             # Suma mas dla każdego czworościanu
             tet_masses = np.sum(nt_mass, axis=1)
-
             # całkowita masa
             total_nt_mass = np.sum(tet_masses)
 
@@ -845,23 +834,23 @@ if __name__ == '__main__':
 
             print("   ====> TOTAL (AND DETAILED...) NT MASS =", total_nt_mass, zone1_nt_m,
                 zone2_nt_m, zone3_nt_m, end=" ")
-            logfile.write("{:20.8f} {:20.8f} {:20.8f} {:20.8f}".format(total_nt_mass,zone1_nt_m,zone2_nt_m,zone3_nt_m))
-        #cprint('\ntime of neurotransmiter calculation: '+str(time.time()-t2), 'black', 'on_white')
-
-        # Calculate synthesised amount of neurotransmitter !!!!!!!!!!!!!!!!!!!
-        t3 = time.time()
-        if ii%n_timec==0:
+            
+            # Calculate synthesised amount of neurotransmitter !!!!!!!!!!!!!!!!!!!
+            t3 = time.time()
             # Calculate
             delta_f = vector_f - vector_f_wo_p
             delta_m = 0.25 * delta_f[NT_VOL_INDX] * COL4[:, np.newaxis]
             delta_tet = np.sum(delta_m, axis=1)
             prod_nt_mass = np.sum(delta_tet)
             print("==(!!!)=> PRODUCED NT MASS =", prod_nt_mass, " ")
-            logfile.write("{:20.8f}".format(prod_nt_mass))
+            logfile.write(f"{total_nt_mass:20.8f} {zone1_nt_m:20.8f} {zone2_nt_m:20.8f} {zone3_nt_m:20.8f} {prod_nt_mass:20.8f}")
             
-        #cprint('\nsynthesised amount of neurotransmitter: '+str(time.time()-t3), 'black', 'on_white')
+            
+            cprint('\nsynthesised amount of neurotransmitter: '+str(time.time()-t3), 'black', 'on_white')
+            cprint('\ntime of neurotransmiter calculation: '+str(time.time()-t2), 'black', 'on_white')
 
         # Plot total NT mass vs time every n_timep'th iteration (but CALCULATE every iteration)
+        t = time.time()
         iter_t.append(t)
         iter_v.append(total_nt_mass)
         if ii%n_timep==0:
@@ -874,7 +863,7 @@ if __name__ == '__main__':
             plt.ylim(tyliml, tylimh)
             plt.savefig(file_prefix + PLOTPATH+ 'total90nr' + str(ii) + '.png')
             plt.close()
-
+        cprint("Total NT mass plot time: "+str(time.time()-t), "black", "on_green")
 
         print(" maxit ", solution[1], " minf ", min(vector_f), datetime.now())
         t += dt
@@ -885,8 +874,13 @@ if __name__ == '__main__':
         cprint("Mean iteration time: "+str((time.time()-startbigpentla)/(i1+1))+" s", "black", "on_light_magenta")
         # return to loop start, iterate over
 
+    cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
     render_queue.put((None, None))  # sygnał zakończenia
     render_proc.join()
+    plot_queue.put((None, None, None, None, None, None, None, None, None, None, None))  # sygnał zakończenia
+    plot_proc.join()
+
+    cprint('time with other processes: '+str(time.time()-startbigpentla), 'black', 'on_light_magenta')
 
     # Plot histogram for iteration_time
     fig = plt.figure()
@@ -910,7 +904,7 @@ if __name__ == '__main__':
     plt.close()
 
 
-    cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
+    
 
     # DETAILED
     fig = plt.figure()

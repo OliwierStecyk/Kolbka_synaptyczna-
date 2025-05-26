@@ -4,18 +4,19 @@ import moderngl
 from PIL import Image, ImageDraw, ImageFont
 from pyrr import Matrix44
 import imageio.v3 as iio
-import pyrr
 
 
 class ModernGLRenderer:
     def __init__(self, xxx, yyy, zzz,
-                 xfliml, xflimh, yfliml, yflimh, zfliml, zflimh,
+                 xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, vmin=300, vmax=450,
                  size=(1280, 720), point_size=5.0, grid_steps = 10):
         ## point_size dużo ładniejsze na 5 // wczesniej 3
 
         ## narazie zrobie tak ale pozniej mozna to dodac do init zeby bylo latwiej do modyfikacji
         self.grid_steps = grid_steps
-
+        self.vmin = vmin
+        self.vmax = vmax
+        
         ## ======================= nowa rzecz
         self.xfliml, self.xflimh = xfliml, xflimh
         self.yfliml, self.yflimh = yfliml, yflimh
@@ -34,7 +35,7 @@ class ModernGLRenderer:
         self.vertices = np.column_stack([xxx, yyy, zzz]).astype('f4')
         self.vbo_verts = self.ctx.buffer(self.vertices.tobytes())
 
-        # Kompilacja programu (tylko raz)
+
         self.prog = self.ctx.program(
             vertex_shader=self._get_vertex_shader(),
             fragment_shader=self._get_fragment_shader()
@@ -51,6 +52,7 @@ class ModernGLRenderer:
             self.create_grid_vao('xz', self.yflimh)
         ]
         self._setup_camera()
+        self.colorbar = self.create_colorbar()
         ### nowe
 
         # # Inicjalizacja VAO (bez danych o kolorach)
@@ -72,10 +74,6 @@ class ModernGLRenderer:
             color_attachments=[self.ctx.texture(size, 4)],
             depth_attachment=self.ctx.depth_renderbuffer(size)
         )
-
-        # # Ustawienia kamery (tylko raz)
-        # self._setup_camera(xfliml, xflimh, yfliml, yflimh, zfliml, zflimh)
-        # stare
 
     def _get_vertex_shader(self):
         return f"""
@@ -195,8 +193,10 @@ class ModernGLRenderer:
     #   stare
 
 
-    def render(self, vvv, output_path, vmin=340, vmax=365):
-        colors = ((vvv - vmin)/(vmax - vmin)).astype('f4')
+    def render(self, vvv, output_path):
+        #t = time.time()
+
+        colors = ((vvv - self.vmin)/(self.vmax - self.vmin)).astype('f4')
         vbo_colors = self.ctx.buffer(colors.tobytes())
 
         vao = self.ctx.vertex_array(
@@ -206,7 +206,7 @@ class ModernGLRenderer:
                 (vbo_colors, '1f4', 'in_color')
             ]
         )
-
+        
         self.fbo.use()
         self.fbo.clear(1.0, 1.0, 1.0, 1.0)
 
@@ -219,7 +219,10 @@ class ModernGLRenderer:
         vao.render(moderngl.POINTS)
 
         img = Image.frombytes('RGB', self.size, self.fbo.read(components=3))
-        img = self.add_colorbar(img, vmin, vmax)
+
+        #print(f"Image created in {time.time() - t:.4f}s")
+
+        img = self.add_colorbar(img, self.colorbar)
         iio.imwrite(output_path, image=img, compression=6)
         vbo_colors.release()
 
@@ -270,17 +273,10 @@ class ModernGLRenderer:
             self.fbo.release()
         if self.ctx:
             self.ctx.release()
-    #       stare
 
-    # def release(self):
-    #     self.vao.release()
-    #     self.vbo_verts.release()
-    #     self.prog.release()
-    #     self.fbo.release()
-    #     self.ctx.release()
 
-    def add_colorbar(self, img, vmin, vmax, width=50, margin_top=50, margin_bottom=50, offset_from_edge=10):
-        img_width, img_height = img.size
+    def create_colorbar(self, width=50, margin_top=50, margin_bottom=50, offset_from_edge=10):
+        img_width, img_height = self.size        #identyczne jak self.size
         bar_height = img_height - margin_top - margin_bottom
         hot_colors = np.zeros((bar_height, width, 3), dtype=np.uint8)
 
@@ -295,10 +291,10 @@ class ModernGLRenderer:
 
         colorbar_img = Image.fromarray(hot_colors, 'RGB')
 
-        label_margin = 60  # miejsce na napisy z wartościami
+        label_margin = 60*(self.size[0]//1000)  # miejsce na napisy z wartościami
         total_width = img_width + offset_from_edge + width + label_margin
         final_img = Image.new('RGB', (total_width, img_height), color=(255, 255, 255))
-        final_img.paste(img, (0, 0))
+        #final_img.paste(img, (0, 0))
 
         # Tło pod kolorbar
         border = Image.new('RGB', (width + 2, bar_height + 2), (0, 0, 0))
@@ -310,22 +306,27 @@ class ModernGLRenderer:
         # Dodawanie podziałki
         draw = ImageDraw.Draw(final_img)
         try:
-            font = ImageFont.truetype("arial.ttf", 18)
+            font = ImageFont.truetype("arial.ttf", 18*(self.size[0]//1000))
         except:
             font = ImageFont.load_default()
 
-        step = 5  # co ile wartości pokazywać
-        values = np.arange(vmin, vmax + 1, step)
+        step = (self.vmax-self.vmin)/8           # co ile wartości pokazywać
+        values = np.arange(self.vmin, self.vmax + 1, step)
 
         for value in values:
-            if not (vmin <= value <= vmax):
+            if not (self.vmin <= value <= self.vmax):
                 continue
-            rel = (value - vmin) / (vmax - vmin)
+            rel = (value - self.vmin) / (self.vmax - self.vmin)
             y = int(margin_top + (1 - rel) * bar_height)
             draw.line([(bar_x + width, y), (bar_x + width + 10, y)], fill=(0, 0, 0), width=2)
             draw.text((bar_x + width + 12, y - 10), f"{value:.0f}", fill=(0, 0, 0), font=font)
-
+        
         return final_img
+
+
+    def add_colorbar(self, img, colorbar_img):
+        colorbar_img.paste(img, (0, 0))
+        return colorbar_img
 
     # def add_colorbar(self, img, vmin, vmax, width=100):
     #     """Dodaje colorbar do obrazu używając PIL"""
@@ -451,11 +452,13 @@ if __name__ == "__main__":
         xfliml=350, xflimh=410,
         yfliml=250, yflimh=280,
         zfliml=100, zflimh=200,
-        size=(1280, 720),
-        point_size=3.0
+        vmin=340, vmax=365,
+        size=(1440,1080),
+        point_size=7.0
     )
 
     output_path = os.path.join(os.getcwd(), 'out_mglhot_v2.png')
-
-    renderer.render(vvv, output_path, vmin=340, vmax=365)
+    t = time.time()
+    renderer.render(vvv, output_path)
+    print(f"Render time: {time.time() - t:.4f}s")
     print(f"Image saved to: {output_path}")

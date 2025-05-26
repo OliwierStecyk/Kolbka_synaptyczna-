@@ -2,12 +2,11 @@ print("\n Final Model, cellular automaton, version <90>, November 2023 ")
 print(" All files reside in one directory C: Pythondata Graphics90s ")
 
 
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import time
-
 import matplotlib as mpl
-mpl.use('Agg')
+# mpl.use('Agg')
+import math
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
@@ -419,10 +418,10 @@ fig = plt.figure()
 colmap = cm.ScalarMappable(cmap=cm.hot)
 colmap.set_array(NT_dens)
 colmap.set_clim(vfliml, vflimh)
-cmp = plt.get_cmap("rainbow")
+cm = plt.get_cmap("rainbow")
 ax = fig.add_subplot(111, projection='3d', alpha=1.0)
 ax.grid(True)
-ax.scatter(x_int, y_int, z_int, 'z', s=3.0, c=NT_dens, cmap=cmp )
+ax.scatter(x_int, y_int, z_int, 'z', s=3.0, c=NT_dens, cmap=cm )
 #ax.scatter(x_int, y_int, z_int, NT_dens, s=3.0, c=NT_dens, cmap=cm, )
 plt.xlim(xfliml,xflimh)
 plt.ylim(yfliml,yflimh)
@@ -483,7 +482,7 @@ S_TET_MASK1 = S_tet[:, 1].toarray().flatten() > 0
 S_TET0 = S_tet[:, 0].toarray().flatten()
 
 # Create a mask for the exocytosis condition and check if i evaluates to True
-@numba.njit(cache=True)
+@numba.njit()
 def get_exocytosis(i):
     return (
         ((i > 210) and (i < 252)) or
@@ -502,45 +501,18 @@ def exocytosis_math(delta3_m_i, NT_dens, vol_x_ro):
 
     return delta3_m_i, NT_dens, vol_x_ro
 
-rainbow = cm.ScalarMappable(cmap=cm.rainbow)
-rainbow.set_array(NT_dens)
-rainbow.set_clim(vfliml, vflimh)
-
-def generate3D_plot(x_int, y_int, z_int, c, s, vmin, vmax, xbottom, xtop, ybottom, ytop, zbottom, ztop, outPath='./', cmap='rainbow'):
-    try:
-        fig = plt.figure()
-        cmp = plt.get_cmap(cmap)
-        ax = fig.add_subplot(111, projection='3d', alpha=1.0)
-        ax.grid(True)
-        ax.scatter(x_int, y_int, z_int, 'z', c=NT_dens, s=sss*NT_dens, cmap=cmp,
-                vmin=vfliml, vmax=vflimh, lw=0)
-        plt.xlim(xfliml, xflimh)
-        plt.ylim(yfliml, yflimh)
-        plt.tight_layout()
-        ax.set_zlim(zfliml, zflimh)
-        cb = fig.colorbar(rainbow, ax=ax)
-        plt.savefig(fin5_dir_name + '/tur_'+str(10000+i)+'.png', dpi=300)
-        plt.close()
-    except Exception as e:
-        raise RuntimeError(f"Error generating 3D plot: {e}")
-        
-
-#generate3D_plot(x_int, y_int, z_int, NT_dens, sss, vfliml, vflimh, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, fin5_dir_name+'/tur_'+str(10000+i)+'.png')
-
 t0=time.time()
-'''
-if __name__ == '__main__':
-    render_queue = Queue()
-    render_proc = Process(target=render_worker, args=(render_queue, xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh))
-    render_proc.start()'''
-
-#exequtor = ThreadPoolExecutor(max_workers=4)
 for i in range(max_iter):  # 1 diffsn - n_nei: table [n_tet] of no. of tet neighbrs
     #             - id_nei: table [n_tet x 4] of (in fact) n_nei[i_tet] neighs ids
     #             - S_nei:  table [n_tet x 4] of (in fact) n_nei[i_tet] neighs faces
     #             - r_nei:  table [n_tet x 4] of (in fact) n_nei[i_tet] nghs distances
     
-
+    # print("Max diff",
+    #       [(i, delta1_m_i[i]) for i in range(n_tet)
+    #        if delta1_m_i[i] >= 0.99 * DIFF_max], end=" ")
+    # print(" NT amnt 0 = ", sum(vol_x_ro),   " NT max 0 = ", max(vol_x_ro), end=" ")
+    # print(" DIFF amnt = ", sum(delta1_m_i), " DIFF max = ", DIFF_max,      end=" ")
+    # 2 synthesis
     t=time.time()
 
     delta1_m_i = calc_delta1_m(NT_dens, delta1_m_i, n_tet, n_nei, id_nei, S_neigh, r_neigh, dt, diffusion)
@@ -549,45 +521,61 @@ for i in range(max_iter):  # 1 diffsn - n_nei: table [n_tet] of no. of tet neigh
     print(" SYNTH amnt = ", SYNTH_AMNT, " ")
     NT_dens, vol_x_ro, t_volro[i] = modify_NT(delta1_m_i, delta2_m_i, vol_x_ro, NT_dens, V_tet)
 
+    # print(" NT amnt 1 = ", sum(vol_x_ro), " NT max 1 = ", max(vol_x_ro),  end=" ")
     # 3 release
+
     if get_exocytosis(i):
         delta3_m_i, NT_dens, vol_x_ro = exocytosis_math(delta3_m_i, NT_dens, vol_x_ro)
         
         
+        # this print takes time and and is unnecessary
+        #print(" EXO: ", sum([delta3_m_i[ii] * V_tet[ii] for ii in range(n_tet) if S_tet[ii, 1] > 0]), end=" ")
+    #else:
+        #print(" EXO: ", 0.0)
+    # 4 control
+    #NT_mass = np.sum(NT_dens * V_tet)
+    #print(" NT AMOUNT=", NT_mass, " AMIN=", min(vol_x_ro), " AMAX=", max(vol_x_ro),
+     #     " RHOMIN=", min(NT_dens), " RHOMAX=", max(NT_dens),
+      #    ", TIME=", datetime.now(), end=" ")
+    # print(" << I =", i, ">> AMIN=", min(NT_dens), " AMAX=", max(NT_dens))
     print(" << I =", i, ">>")
-
-    # 5 draw 3d and 2d plots of density
-    if (i % n_plot == 0) or get_exocytosis(i):
-        #exequtor.submit(generate3D_plot, x_int, y_int, z_int, NT_dens, sss, vfliml, vflimh, 
-         #   xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, fin5_dir_name+'/tur_'+str(10000+i)+'.png')
-        
-        generate3D_plot( x_int, y_int, z_int, NT_dens, sss, vfliml, vflimh, 
-            xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, fin5_dir_name+'/tur_'+str(10000+i)+'.png')
-        
     print('\nczas: ', time.time() - t, 's\n')
+    # 5 draw 3d and 2d plots of density
+    #if (i % n_plot == 0) or exocytosis:
+    if False:
+        fig = plt.figure()
+        cm = plt.get_cmap("hot")
+        ax = fig.add_subplot(111, projection='3d', alpha=1.0)
+        ax.grid(True)
+        ax.scatter(x_int, y_int, z_int, 'z', c=NT_dens, s=sss*NT_dens, cmap=cm,
+                   vmin=vfliml, vmax=vflimh, lw=0)
+        plt.xlim(xfliml, xflimh)
+        plt.ylim(yfliml, yflimh)
+        plt.tight_layout()
+        ax.set_zlim(zfliml, zflimh)
+        cb = fig.colorbar(colmap, ax=ax)
+        plt.savefig(fin5_dir_name + '/tur_'+str(10000+i)+'.png', dpi=300)
+        plt.close()
         ###################################################################################
-    '''fig = plt.figure()
-    cmap_hot = plt.get_cmap("hot")
-    plt.grid(True)
-    plt.scatter(rrr, NT_dens, cmap=cmap_hot, c=z_int, vmin=-1.6, vmax=+1.6, s=30.0, lw=0)
-    plt.xlim(-0.00, 0.65)
-    plt.ylim(280.0, 520.0)
-    plt.savefig(fin5_dir_name + 'tsct90nr'+str(10000+i)+'.png')
-    plt.close()'''
-
-#exequtor.shutdown(wait=True)
+        fig = plt.figure()
+        cmap_hot = plt.get_cmap("hot")
+        plt.grid(True)
+        plt.scatter(rrr, NT_dens, cmap=cmap_hot, c=z_int, vmin=-1.6, vmax=+1.6, s=30.0, lw=0)
+        plt.xlim(-0.00, 0.65)
+        plt.ylim(280.0, 520.0)
+        plt.savefig(fin5_dir_name + 'tsct90nr'+str(10000+i)+'.png')
+        plt.close()
 
 print('whole time: ', time.time()-t0, 's')
 print( " \n And now, ... the plot of NT_AMOUNT vs iteration \n ")
 print(" limits ", min(t_time), max(t_time), min(t_volro), max(t_volro))
 
-'''
+
 fig = plt.figure()
 cmap_hot = plt.get_cmap("hot")
 plt.grid(True)
 plt.scatter(t_time, t_volro, c='r')
 plt.xlim(0.0, 0.02)
 plt.ylim(280.0, 520.0)
-#plt.show()
+plt.show()
 plt.close()
-'''
