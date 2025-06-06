@@ -2,20 +2,22 @@ print("\n Final Model, cellular automaton, version <90>, November 2023 ")
 print(" All files reside in one directory C: Pythondata Graphics90s ")
 
 
-from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Process, Queue
 from datetime import datetime
 import time
 
-import matplotlib as mpl
-mpl.use('Agg')
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
+from numba import prange
 from scipy.sparse import lil_matrix
 from matplotlib import cm
 import statistics
 import os
 import json
+from plot_2d import ScattWorker
 plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial']
 plt.rcParams['font.size'] = 16
@@ -25,13 +27,14 @@ print("\n S T A R T > > > ", datetime.now(), "\n")
 
 def init_dens(x, y, z)->np.ndarray:
     rr = x**2 + y**2 + z**2
-    dd = a_dens * np.exp((2.0 * np.random.rand() - 1.0) * c_dens + b_dens * rr)     #c_dens zeruje wszystko ask 
+    dd = a_dens * np.exp((2.0 * np.random.rand() - 1.0) * c_dens + b_dens * rr) 
     return dd
 
+@numba.njit()
+def ll(xx1, yy1, zz1, xx2, yy2, zz2):
+        return ((xx2 - xx1) ** 2 + (yy2 - yy1) ** 2 +  (zz2 - zz1) ** 2) ** 0.5
 
 def S_ABC(v_list):
-    def ll(xx1, yy1, zz1, xx2, yy2, zz2):
-        return ((xx2 - xx1) ** 2 + (yy2 - yy1) ** 2 +  (zz2 - zz1) ** 2) ** 0.5
     d_AB = ll(xn[v_list[0]],yn[v_list[0]],zn[v_list[0]],xn[v_list[1]],yn[v_list[1]],zn[v_list[1]])
     d_AC = ll(xn[v_list[0]],yn[v_list[0]],zn[v_list[0]],xn[v_list[2]],yn[v_list[2]],zn[v_list[2]])
     d_BC = ll(xn[v_list[1]],yn[v_list[1]],zn[v_list[1]],xn[v_list[2]],yn[v_list[2]],zn[v_list[2]])
@@ -43,19 +46,17 @@ def l_AB(xl1, yl1, zl1, xl2, yl2, zl2):
     return ((xl2 - xl1) ** 2 + (yl2 - yl1) ** 2 + (zl2 - zl1) ** 2) ** 0.5
 
 
-diffusion      =     3.0  #  was 3.0, then 6.0, them 13.0
+diffusion      =     0.3  #  was 3.0, then 6.0, them 13.0
 permeability   =    50.0  #  was 4.16, was ..., was 25000, was 30000, 31000, 20000  ...
 print(" \n\n Increase permeability, probably to 30000? \n\n ")
 synthesis_rate =     5.0
-max_iter       =    2001
+max_iter       =    1001
 dt             = 0.00001
 
 
 # arrays
-t_time  = np.zeros(max_iter, dtype = np.float64)
+t_time  = np.arange(max_iter, dtype = np.float64)*dt
 t_volro = np.zeros(max_iter, dtype = np.float64)
-for i in range(max_iter):
-    t_time[i] = float(i) * dt
 print(" Calculated time points \n",t_time)
 
 
@@ -76,7 +77,7 @@ print("\n\n * * * * SCALING X COORDINATES BY THE FACTOR OF ", x_scale, "\n\n")
 # a_dens  = a_dens * 399.928383 / 400.017311
 # VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
 read_dir_name = './'                               #'C:\\PythonData\\Graphics90s\\'
-fin5_dir_name = './plots/'                          #'C:\\PythonData\\Graphics90s\\'
+fin5_dir_name = './plots2/'                          #'C:\\PythonData\\Graphics90s\\'
 output_dir_name = './output/'
 if not os.path.exists(fin5_dir_name):
     os.makedirs(fin5_dir_name)
@@ -390,8 +391,8 @@ plt.close()
 
 # print(" WRITE INIT DENSITIES IN NODES TO FILE ")
 node_NT = init_dens(xn, yn, zn)
-with open(output_dir_name + "dens_N_PC.txt", "w") as dens_N:
-    json.dump(node_NT.tolist(), dens_N, indent=4)
+#with open(output_dir_name + "dens_N_PC.txt", "w") as dens_N:
+ #   json.dump(node_NT.tolist(), dens_N, indent=4)
 
 #for i in range(n_nod):
  #   dens_N.write(str(node_NT[i]) + "\n")
@@ -453,8 +454,20 @@ for itet in range(n_tet):
             diff -= S_neigh[itet, i_nei]
 print(" Diff = ", diff, "\n\n")
 
-@numba.njit()
-def calc_delta1_m(NT_dens, delta1_m_i, n_tet, n_nei, id_nei, S_neigh, r_neigh, dt, diffusion):
+
+def render_worker(q, xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, 
+                  vmin, vmax, size=(1440, 1080), point_size=12.0):
+    from modernGLplot import ModernGLRenderer
+    ploter = ModernGLRenderer(xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, 
+                              vmin, vmax, size=size, point_size=point_size)
+    while True:
+        vvv, path = q.get()
+        if vvv is None:
+            break
+        ploter.render(vvv, path)
+
+@numba.njit( )
+def calc_delta1_m(NT_dens, delta1_m_i):
     for i_tet in range(n_tet):
         for i_nei in range(n_nei[i_tet]):
             jj = id_nei[i_tet, i_nei]
@@ -462,20 +475,24 @@ def calc_delta1_m(NT_dens, delta1_m_i, n_tet, n_nei, id_nei, S_neigh, r_neigh, d
                 dt * (NT_dens[jj] - NT_dens[i_tet])
     return delta1_m_i
 
-
-
-def calc_delta2_m(NT_dens, V_tet, synthesis_rate, ro_, tf, dt):
-    mask = (NT_dens < ro_) & (tf == -2)  #  label -2 means SynZone here
-    delta2_m_i[mask] = synthesis_rate * (ro_ - NT_dens[mask]) * V_tet[mask] * dt
-    delta2_m_i[~mask] = 0.0
+@numba.njit( )
+def calc_delta2_m(NT_dens, delta2_m_i):
+    for i_tet in range(n_tet):
+        if (NT_dens[i_tet] < ro_) and (tf[i_tet] == -2):  #  label -2 means SynZone here
+            delta2_m_i[i_tet] = \
+                synthesis_rate * (ro_ - NT_dens[i_tet]) * V_tet[i_tet] * dt
+        else:
+            delta2_m_i[i_tet] = 0.0
     return delta2_m_i
 
-def modify_NT(delta1_m_i, delta2_m_i, vol_x_ro, NT_dens, V_tet):
-    vol_x_ro += delta1_m_i + delta2_m_i
-    np.maximum(vol_x_ro, 0.0, out=vol_x_ro)
-    NT_dens[:] = vol_x_ro / V_tet
+@numba.njit()
+def modify_NT(delta1_m_i, delta2_m_i, vol_x_ro, NT_dens):
+    for i_tet in prange(n_tet):
+            vol_x_ro[i_tet] += delta1_m_i[i_tet] + delta2_m_i[i_tet]
+            if vol_x_ro[i_tet] < 0:
+                vol_x_ro[i_tet] = 0.0 
+            NT_dens[i_tet] = vol_x_ro[i_tet] / V_tet[i_tet]
     return NT_dens, vol_x_ro, np.sum(vol_x_ro)
-
 
 DIFF_MAX = np.max(delta1_m_i)
 SYNTH_AMNT = np.sum(delta2_m_i)     # zajmij się tym
@@ -492,102 +509,84 @@ def get_exocytosis(i):
         ((i > 1711) and (i < 1753)) or
         ((i > 2000) and ((i % 500) > 210) and ((i % 500) < 256))
     )
+
+
 @numba.njit()
 def exocytosis_math(delta3_m_i, NT_dens, vol_x_ro):
-    delta3_m_i[S_TET_MASK1] = -permeability * NT_dens[S_TET_MASK1] * 3.0 * S_TET0[S_TET_MASK1] * dt
-    delta3_m_i[~S_TET_MASK1] = 0.0
-
-    vol_x_ro += delta3_m_i * V_tet
-    NT_dens = vol_x_ro / V_tet
-
+    for ii in range(n_tet):
+        if S_TET_MASK1[ii]:
+            delta3_m_i[ii] = -permeability * NT_dens[ii] * 3.0 * S_TET0[ii] * dt
+            vol_x_ro[ii] += delta3_m_i[ii] * V_tet[ii]
+        else:
+            delta3_m_i[ii] = 0.0
+        NT_dens[ii] = vol_x_ro[ii] / V_tet[ii]
     return delta3_m_i, NT_dens, vol_x_ro
 
-rainbow = cm.ScalarMappable(cmap=cm.rainbow)
-rainbow.set_array(NT_dens)
-rainbow.set_clim(vfliml, vflimh)
-
-def generate3D_plot(x_int, y_int, z_int, c, s, vmin, vmax, xbottom, xtop, ybottom, ytop, zbottom, ztop, outPath='./', cmap='rainbow'):
-    try:
-        fig = plt.figure()
-        cmp = plt.get_cmap(cmap)
-        ax = fig.add_subplot(111, projection='3d', alpha=1.0)
-        ax.grid(True)
-        ax.scatter(x_int, y_int, z_int, 'z', c=NT_dens, s=sss*NT_dens, cmap=cmp,
-                vmin=vfliml, vmax=vflimh, lw=0)
-        plt.xlim(xfliml, xflimh)
-        plt.ylim(yfliml, yflimh)
-        plt.tight_layout()
-        ax.set_zlim(zfliml, zflimh)
-        cb = fig.colorbar(rainbow, ax=ax)
-        plt.savefig(fin5_dir_name + '/tur_'+str(10000+i)+'.png', dpi=300)
-        plt.close()
-    except Exception as e:
-        raise RuntimeError(f"Error generating 3D plot: {e}")
-        
-
-#generate3D_plot(x_int, y_int, z_int, NT_dens, sss, vfliml, vflimh, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, fin5_dir_name+'/tur_'+str(10000+i)+'.png')
 
 t0=time.time()
-'''
+
 if __name__ == '__main__':
-    render_queue = Queue()
-    render_proc = Process(target=render_worker, args=(render_queue, xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh))
-    render_proc.start()'''
+    from plot_2d import ScattWorker
+    #render_queue = Queue()
+    #render_proc = Process(target=render_worker, args=(render_queue, x_int, y_int, z_int, xfliml, xflimh, 
+     #                                                 yfliml, yflimh, zfliml, zflimh, vfliml, vflimh))
+    #render_proc.start()
+    plot_queue = Queue()
+    plot_proc = Process(target=ScattWorker, args=(plot_queue,))
+    plot_proc.start()
+    for i in range(max_iter):  # 1 diffsn - n_nei: table [n_tet] of no. of tet neighbrs
+        #             - id_nei: table [n_tet x 4] of (in fact) n_nei[i_tet] neighs ids
+        #             - S_nei:  table [n_tet x 4] of (in fact) n_nei[i_tet] neighs faces
+        #             - r_nei:  table [n_tet x 4] of (in fact) n_nei[i_tet] nghs distances
+        
 
-#exequtor = ThreadPoolExecutor(max_workers=4)
-for i in range(max_iter):  # 1 diffsn - n_nei: table [n_tet] of no. of tet neighbrs
-    #             - id_nei: table [n_tet x 4] of (in fact) n_nei[i_tet] neighs ids
-    #             - S_nei:  table [n_tet x 4] of (in fact) n_nei[i_tet] neighs faces
-    #             - r_nei:  table [n_tet x 4] of (in fact) n_nei[i_tet] nghs distances
+        t=time.time()
+
+        delta1_m_i = calc_delta1_m(NT_dens, delta1_m_i)
+        print(' delta1 time = ', time.time()-t, 's')
+        t1=time.time()
+        
+        delta2_m_i = calc_delta2_m(NT_dens, delta2_m_i)
+        print(" SYNTH amnt = ", SYNTH_AMNT, " ")
+        
+        NT_dens, vol_x_ro, t_volro[i] = modify_NT(delta1_m_i, delta2_m_i, vol_x_ro, NT_dens)
+        print(' delta2 time = ', time.time()-t1, 's')
+        
+        # 3 release
+        if get_exocytosis(i):
+            delta3_m_i, NT_dens, vol_x_ro = exocytosis_math(delta3_m_i, NT_dens, vol_x_ro)
+            
+        print(" << I =", i, ">>")
+
+        
+        if (i % n_plot == 0) or get_exocytosis(i):
+            pass
+            #render_queue.put((NT_dens, fin5_dir_name+'/tur_'+str(10000+i)+'.png'))
+        if (i % 50 == 0) or get_exocytosis(i):
+            pass
+            plot_queue.put((rrr, NT_dens, z_int, fin5_dir_name+'/tsct90nr'+str(10000+i)+'.png'))
+            #   xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, fin5_dir_name+'/tur_'+str(10000+i)+'.png')
+            
+        print('\nczas: ', time.time() - t, 's\n')
+
+
+    #render_queue.put((None, None))  # sygnał zakończenia
+    #render_proc.join()
+    print('time with 3d plots: ', time.time()-t0, 's')
     
+    plot_queue.put((None, None, None, None))
+    plot_proc.join()
 
-    t=time.time()
+    print('whole time: ', time.time()-t0, 's')
+    print( " \n And now, ... the plot of NT_AMOUNT vs iteration \n ")
+    print(" limits ", min(t_time), max(t_time), min(t_volro), max(t_volro))
 
-    delta1_m_i = calc_delta1_m(NT_dens, delta1_m_i, n_tet, n_nei, id_nei, S_neigh, r_neigh, dt, diffusion)
-    print(' delta1 time = ', time.time()-t, 's')
-    delta2_m_i = calc_delta2_m(NT_dens, V_tet, synthesis_rate, ro_, tf, dt)
-    print(" SYNTH amnt = ", SYNTH_AMNT, " ")
-    NT_dens, vol_x_ro, t_volro[i] = modify_NT(delta1_m_i, delta2_m_i, vol_x_ro, NT_dens, V_tet)
 
-    # 3 release
-    if get_exocytosis(i):
-        delta3_m_i, NT_dens, vol_x_ro = exocytosis_math(delta3_m_i, NT_dens, vol_x_ro)
-        
-        
-    print(" << I =", i, ">>")
-
-    # 5 draw 3d and 2d plots of density
-    if (i % n_plot == 0) or get_exocytosis(i):
-        #exequtor.submit(generate3D_plot, x_int, y_int, z_int, NT_dens, sss, vfliml, vflimh, 
-         #   xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, fin5_dir_name+'/tur_'+str(10000+i)+'.png')
-        
-        generate3D_plot( x_int, y_int, z_int, NT_dens, sss, vfliml, vflimh, 
-            xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, fin5_dir_name+'/tur_'+str(10000+i)+'.png')
-        
-    print('\nczas: ', time.time() - t, 's\n')
-        ###################################################################################
-    '''fig = plt.figure()
+    fig = plt.figure()
     cmap_hot = plt.get_cmap("hot")
     plt.grid(True)
-    plt.scatter(rrr, NT_dens, cmap=cmap_hot, c=z_int, vmin=-1.6, vmax=+1.6, s=30.0, lw=0)
-    plt.xlim(-0.00, 0.65)
-    plt.ylim(280.0, 520.0)
-    plt.savefig(fin5_dir_name + 'tsct90nr'+str(10000+i)+'.png')
-    plt.close()'''
-
-#exequtor.shutdown(wait=True)
-
-print('whole time: ', time.time()-t0, 's')
-print( " \n And now, ... the plot of NT_AMOUNT vs iteration \n ")
-print(" limits ", min(t_time), max(t_time), min(t_volro), max(t_volro))
-
-'''
-fig = plt.figure()
-cmap_hot = plt.get_cmap("hot")
-plt.grid(True)
-plt.scatter(t_time, t_volro, c='r')
-plt.xlim(0.0, 0.02)
-plt.ylim(280.0, 520.0)
-#plt.show()
-plt.close()
-'''
+    plt.scatter(t_time, t_volro, c='r')
+    plt.xlim(0.0, 0.02)
+    plt.ylim(398, 403)
+    plt.savefig(fin5_dir_name + 't_volro.png')
+    plt.close()

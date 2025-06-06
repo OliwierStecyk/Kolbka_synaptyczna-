@@ -11,8 +11,7 @@ from scipy.linalg import norm
 from scipy.sparse import lil_matrix
 import scipy.sparse as sp
 from functools import lru_cache
-from modernGLplot import ModernGLRenderer
-
+#from modernGLplot import ModernGLRenderer
 
 # INCLUDE PLOT LIBRARIES
 import matplotlib as mpl
@@ -118,7 +117,7 @@ def coefficients(tpx, tpy, tpz):
 #  P R O G R A M   S T A R T   ====================================================================
 #  Begin - set parameters
 print("\nBEG", datetime.now(), time.time())
-diffusion           =   6.0
+diffusion           =   3.0
 permeability        =  80.0
 permeability       *=   0.2
 synthesis_rate      =  50
@@ -213,7 +212,7 @@ filen.close()
 
 
 # Shifted numbers of iterations used to label output files
-i1_range  =  5001  #  Do i1_range iterations, incl. last
+i1_range  =  10001  #  Do i1_range iterations, incl. last
 i1_offset = n_iter  #  numbering them from (including) i1_offset
 
 
@@ -452,9 +451,13 @@ file.close()
 
 # Initial (and permanent!) radius
 rrr = np.sqrt(xxx**2 + yyy**2 + zzz**2)
-# "CONTINUOUS" initial density - Gauss curve
 
+cprint(str(np.max(rrr))+' promień\n', 'black', 'on_red')
+# "CONTINUOUS" initial density - Gauss curve
+print('Cords ', min(xxx), max(xxx), min(yyy), max(yyy), min(zzz), max(zzz))
+t11=time.time()
 vector_f = init_densities(xxx, yyy, zzz, a_dens, b_dens, c_dens)
+print("czas: " ,time.time()-t11)
 
 # Calculate total amount of neurotransmitter
 total_nt_mass = np.sum(0.25 * vector_f[np.array(nt_vol)[:, :4].astype(int)] * np.array(nt_vol)[:, 4][:, np.newaxis])
@@ -662,6 +665,13 @@ previous_release = 0.0
 
 logfile = open(file_prefix + 'log90.txt', 'a')
 startbigpentla = time.time()
+cum =0
+cum1 = 0
+cunter = 0
+counter = 0
+from modernGLplot import ModernGLRenderer
+#ploter = ModernGLRenderer(xxx, yyy, zzz, xfliml, xflimh, yfliml, yflimh, zfliml, zflimh, 
+ #                             vfliml, vflimh, size=(1440, 1080), point_size=12.0)
 
 iteration_time = []
 if __name__ == '__main__':
@@ -694,10 +704,12 @@ if __name__ == '__main__':
         #synth_flag.fill(0)     i tak jest nadpisane
 
         # print(" DETECT ROWS !! ")     Parallelismus
+        
         synthesis_vector, synth_flag = calc_synthesis(vector_f)
-
+        
         total_production_nodes = np.count_nonzero(synth_flag > 0)
-        # sapor puppis total_production_nodes = sum([1 for i_prod in range(points_number) if synth_flag[i_prod] > 0])
+
+        #sapporpuppis total_production_nodes = sum([1 for i_prod in range(points_number) if synth_flag[i_prod] > 0])
 
         vector_f_times_right_copy = vector_f_times_right[:]
 
@@ -713,16 +725,22 @@ if __name__ == '__main__':
         inner_iteration = 1
 
         solution = sp.linalg.cg(matrix_left, vector_f_times_right, x0=vector_f, atol=toler, maxiter=maxit)
+
+
         vector_f_new = solution[0]
 
         while inner_iteration < 101:
-
             jumps_from_below_to_above, jumps_from_above_to_below = calc_jumps(vector_f, vector_f_new)
-            print("\nABOVE -> BELOW: ",jumps_from_above_to_below, "  BELOW->ABOVE: ",jumps_from_below_to_above)
             vector_f = vector_f_new[:]
             
             #  PRODUCTION
+            t1 = time.time()
             synthesis_vector, production_flag = calc_synthesis2(vector_f)
+            #cum += time.time()-t1
+            #cunter +=1
+            #cprint('n\synthesis time '+str( cum/cunter), 'black', 'on_red')
+
+            print("\nABOVE -> BELOW: ",jumps_from_above_to_below, "  BELOW->ABOVE: ",jumps_from_below_to_above)
 
             total_synth = synthesis_vector + previous_step_synthesis
 
@@ -784,6 +802,13 @@ if __name__ == '__main__':
                 vvv = a_g + b_g * vector_f    
 
                 render_queue.put((vvv, PLOTPATH+'grph90nr'+str(ii)+'.png'))
+                #t1 = time.time()
+                #ploter.render(vvv, PLOTPATH+'grphh90nr'+str(ii)+'.png')
+                #cprint('n\plot time '+str( time.time()-t1), 'black', 'on_red')
+                #cum += time.time()-t1
+                #cunter +=1
+                #cprint('n\plot time '+str( cum/cunter), 'black', 'on_red')
+
                 plot_queue.put((rrr, vector_f, zzz, zfliml, zflimh, v_scatt, srliml, srlimh, syliml, sylimh, PLOTPATH+'scatt90nr'+str(ii)+'.png'))
                 '''fig = plt.figure()
                 cm = plt.get_cmap("hot")
@@ -796,12 +821,11 @@ if __name__ == '__main__':
                 plt.savefig(file_prefix + PLOTPATH+ 'scatt90nr' + str(ii) + '.png')
                 plt.close()'''
 
-
+        t1= time.time()
         # Calculate release
-        impuls = f_impulse(t)
         release = 0
         releasing_nodes = 0
-        if( impuls ):
+        if( f_impulse(t) ):
             sum_f = vector_f[NODES_NP[:, 0]] + vector_f[NODES_NP[:, 1]] + vector_f[NODES_NP[:, 2]]
             release_contributions = AREAS_NP * sum_f * (f_impulse(t) * dt * permeability / 3.0)
 
@@ -850,7 +874,7 @@ if __name__ == '__main__':
             cprint('\ntime of neurotransmiter calculation: '+str(time.time()-t2), 'black', 'on_white')
 
         # Plot total NT mass vs time every n_timep'th iteration (but CALCULATE every iteration)
-        t = time.time()
+        #t = time.time()
         iter_t.append(t)
         iter_v.append(total_nt_mass)
         if ii%n_timep==0:
@@ -863,11 +887,15 @@ if __name__ == '__main__':
             plt.ylim(tyliml, tylimh)
             plt.savefig(file_prefix + PLOTPATH+ 'total90nr' + str(ii) + '.png')
             plt.close()
-        cprint("Total NT mass plot time: "+str(time.time()-t), "black", "on_green")
+        #cprint("Total NT mass plot time: "+str(time.time()-t), "black", "on_green")
 
         print(" maxit ", solution[1], " minf ", min(vector_f), datetime.now())
         t += dt
 
+        cprint('reszta kodu: '+str(time.time()-t1), "black", "on_light_magenta")
+        cum1+=time.time()-t1
+        counter+=1
+        cprint('reszta kodu średnia: '+str(cum1/counter), "black", "on_light_magenta")
 
         iteration_time.append(time.time()-inlooptime)
         cprint("Iteration time: "+ str((time.time()-inlooptime)) +" s", "black", "on_light_magenta")
@@ -877,21 +905,12 @@ if __name__ == '__main__':
     cprint("Whole time for loop: "+str(time.time()-startbigpentla)+" s", "black", "on_light_magenta")
     render_queue.put((None, None))  # sygnał zakończenia
     render_proc.join()
+    cprint('time with 3d plots: '+str(time.time()-startbigpentla), 'black', 'on_light_magenta')
     plot_queue.put((None, None, None, None, None, None, None, None, None, None, None))  # sygnał zakończenia
     plot_proc.join()
 
-    cprint('time with other processes: '+str(time.time()-startbigpentla), 'black', 'on_light_magenta')
+    cprint('time with all plots: '+str(time.time()-startbigpentla), 'black', 'on_light_magenta')
 
-    # Plot histogram for iteration_time
-    fig = plt.figure()
-    plt.bar(range(len(iteration_time)), iteration_time, color='blue')
-    plt.xlabel('Iteration Number')
-    plt.ylabel('Iteration Time (s)')
-    plt.title('Iteration Time per Iteration')
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig('./iteration_time_barplot.png')
-    plt.close()
 
     fig = plt.figure()
     plt.plot(range(len(iteration_time)), iteration_time, color='blue', linestyle='-')
