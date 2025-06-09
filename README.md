@@ -2,6 +2,9 @@
 #### In MES directory equation is solved using finite element method
 #### In AUT directory problem is solved by cellular automaton method
 
+------------------
+
+Below are some information used while working at the project not important
 ### legenda do logfile
 
 1. Iteracja
