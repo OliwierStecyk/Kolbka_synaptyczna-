@@ -1,3 +1,7 @@
+#### The proper code is in `AUT_algo/Final_aut_90.py` file and `MES_algo/sim92s_v21_clean.py` file
+#### In MES directory equation is solved using finite element method
+#### In AUT directory problem is solved by cellular automaton method
+
 ### legenda do logfile
 
 1. Iteracja
