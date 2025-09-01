@@ -4,9 +4,9 @@
 
 ---
 
-Repository for "Kolbka Synaptyczna" project
+# Repository for "Kolbka Synaptyczna" project
 
-This repository contains a Python script developed as part of an AI course project. Its purpose is to simulate the behavior of a presynaptic bouton by solving a three-dimensional differential equation. The simulation is implemented using MES (Method of Exact Solutions) and AUT (Automatic Time-stepping) methods.
+### This repository contains a Python script developed as part of an AI course project. Its purpose is to simulate the behavior of a presynaptic bouton by solving a three-dimensional differential equation. The simulation is implemented using MES (Method of Exact Solutions) and AUT (Automatic Time-stepping) methods.
 
 Key features:
 
