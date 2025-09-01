@@ -32,7 +32,6 @@ Below are some information used while working at the project - not important
 #### Komendy do profilowania
 
 '''bash
->>python -m cProfile -o my_program.prof ./kolbka_synaptyczna/sim92s_v21.py
-
->>snakeviz .\my_program.prof
+python -m cProfile -o my_program.prof ./kolbka_synaptyczna/sim92s_v21.py
+snakeviz .\my_program.prof
 '''
