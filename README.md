@@ -18,9 +18,9 @@ Below are some information used while working at the project - not important
 9. zone2_nt_m - INNER ZONE
 10. zone3_nt_m - RELEASE ZONE
 11. prod_nt_mass
-12. time_diff - 524 linijka jest mocne gówno, mierzy w tym gówno kodzie tylko to XD w 533 #  CALCULATE F WITHOUT PRODUCTION
+12. time_diff -
 
-### do przeczytania 
+#### Artykuły użyte:
  - https://www.youtube.com/watch?v=X7vBbelRXn0
  - https://kompendium.plgrid.pl
  - https://nealhughes.net/cython1/
@@ -29,9 +29,10 @@ Below are some information used while working at the project - not important
  - https://cython.readthedocs.io/en/latest/src/tutorial/cython_tutorial.html#id4
  - https://stackoverflow.com/questions/2846653/how-do-i-use-threading-in-python
 
-#### komendy do profilowania
+#### Komendy do profilowania
 
+'''bash
 >>python -m cProfile -o my_program.prof ./kolbka_synaptyczna/sim92s_v21.py
 
 >>snakeviz .\my_program.prof
-
+'''
