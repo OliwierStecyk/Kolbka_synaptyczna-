@@ -2,9 +2,22 @@
 ### In MES directory equation is solved using finite element method
 ### In AUT directory problem is solved by cellular automaton method
 
-------------------
+---
+
+Repository for "Kolbka Synaptyczna" project
+
+This repository contains a Python script developed as part of an AI course project. Its purpose is to simulate the behavior of a presynaptic bouton by solving a three-dimensional differential equation. The simulation is implemented using MES (Method of Exact Solutions) and AUT (Automatic Time-stepping) methods.
+
+Key features:
+
+- 3D differential equation solver
+- Simulation of presynaptic bouton dynamics
+- Implementation of MES and AUT methods
+- Designed for educational and research purposes
+
 
 Below are some information used while working at the project - not important
+
 ### legenda do logfile
 
 1. Iteracja
@@ -35,3 +48,5 @@ Below are some information used while working at the project - not important
 python -m cProfile -o my_program.prof ./kolbka_synaptyczna/sim92s_v21.py
 snakeviz .\my_program.prof
 '''
+
+
